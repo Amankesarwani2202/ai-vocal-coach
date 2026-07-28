@@ -1,4 +1,14 @@
+from pathlib import Path
+import sys
+
 import streamlit as st
+
+ROOT = Path(__file__).resolve().parent
+if ROOT.name == "pages":
+    ROOT = ROOT.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from utils.state import init_session_state, add_score
 from utils.file_handler import temp_audio_file
 from components.ui import display_header, render_score_badge, inject_custom_css
