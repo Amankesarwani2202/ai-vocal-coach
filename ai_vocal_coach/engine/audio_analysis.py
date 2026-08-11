@@ -1,240 +1,1470 @@
 """
-Real-time vocal analysis engine using librosa.
-Analyses pitch stability, breath support, onset smoothness, and continuity
-for each exercise type. Returns structured feedback_data suitable for
-render_results_stage().
+Robust vocal audio analysis engine.
+
+Primary goals:
+    1. Stable pitch tracking using librosa.pyin
+    2. Removal of octave jumps and pitch outliers
+    3. Better distinction between real silence and pYIN uncertainty
+    4. More stable vocal-energy scoring
+    5. More conservative and useful coaching feedback
+    6. Backward-compatible output for exercise_flow.py
+
+The public API remains:
+
+    exercise_type_from_id(exercise_id)
+    analyze_audio(audio_bytes, exercise_type="warm_up")
+
+analyze_audio() returns:
+
+{
+    "score": int,
+    "xp": int,
+    "feedback": [{"time": str, "message": str}],
+    "subscores": {...},
+    "duration": float,
+    "pitch_data": {
+        "f0": [...],
+        "times": [...]
+    }
+}
 """
 
 import io
 import wave as _wave
+
 import numpy as np
+
+
+# ---------------------------------------------------------------------------
+# Optional librosa import
+# ---------------------------------------------------------------------------
 
 try:
     import librosa
     import librosa.feature
     import librosa.onset
+
     LIBROSA_OK = True
+    LIBROSA_VERSION = getattr(librosa, "__version__", "unknown")
 except ImportError:
+    librosa = None
     LIBROSA_OK = False
+    LIBROSA_VERSION = None
+
+
+# ---------------------------------------------------------------------------
+# Analysis configuration
+# ---------------------------------------------------------------------------
 
 HOP = 512
 FRAME = 2048
 
+MIN_RECORDING_SECONDS = 0.8
 
-# ── Loading ──────────────────────────────────────────────────────────────────
+MIN_F0 = 65.0
+MAX_F0 = 1050.0
+
+# Pitch confidence / quality
+MIN_VOICED_FRAMES = 6
+
+# A real gap should normally last at least this long.
+MIN_GAP_SECONDS = 0.30
+
+# Ignore very small variations in the first/last part of a recording.
+EDGE_IGNORE_SECONDS = 0.20
+
+# Number of feedback messages returned to the UI.
+MAX_FEEDBACK_ITEMS = 8
+
+
+# ---------------------------------------------------------------------------
+# Audio loading
+# ---------------------------------------------------------------------------
 
 def _load_audio(audio_bytes):
-    """Return (y float32 mono, sr) from WAV bytes. Tries librosa then wave."""
+    """
+    Load WAV/audio bytes into mono float32 audio.
+
+    Returns:
+        (y, sr)
+
+    or:
+        (None, None)
+    """
+
+    if not audio_bytes:
+        return None, None
+
+    # Primary path: librosa
     if LIBROSA_OK:
         try:
-            y, sr = librosa.load(io.BytesIO(audio_bytes), sr=None, mono=True)
-            return y.astype(np.float32), int(sr)
+            y, sr = librosa.load(
+                io.BytesIO(audio_bytes),
+                sr=None,
+                mono=True,
+            )
+
+            y = np.asarray(y, dtype=np.float32)
+
+            if len(y) == 0:
+                return None, None
+
+            # Remove NaN/Inf values defensively.
+            y = np.nan_to_num(
+                y,
+                nan=0.0,
+                posinf=0.0,
+                neginf=0.0,
+            )
+
+            return y, int(sr)
+
         except Exception:
             pass
-    # Fallback: manual WAV parse
+
+    # Fallback WAV parser
     try:
-        with _wave.open(io.BytesIO(audio_bytes), 'rb') as wf:
-            ch = wf.getnchannels()
-            sw = wf.getsampwidth()
+        with _wave.open(io.BytesIO(audio_bytes), "rb") as wf:
+            channels = wf.getnchannels()
+            sample_width = wf.getsampwidth()
             sr = wf.getframerate()
             frames = wf.readframes(wf.getnframes())
-        dtype = {1: np.int8, 2: np.int16, 4: np.int32}.get(sw, np.int16)
-        raw = np.frombuffer(frames, dtype=dtype).astype(np.float32)
-        if ch > 1:
-            raw = raw.reshape(-1, ch).mean(axis=1)
-        y = raw / float(np.iinfo(dtype).max)
-        return y, sr
+
+        if not frames:
+            return None, None
+
+        # 16-bit WAV is what st.audio_input normally provides.
+        if sample_width == 2:
+            raw = np.frombuffer(
+                frames,
+                dtype=np.int16,
+            ).astype(np.float32)
+
+            scale = 32768.0
+
+        elif sample_width == 1:
+            raw = np.frombuffer(
+                frames,
+                dtype=np.uint8,
+            ).astype(np.float32)
+
+            raw = raw - 128.0
+            scale = 128.0
+
+        elif sample_width == 4:
+            raw = np.frombuffer(
+                frames,
+                dtype=np.int32,
+            ).astype(np.float32)
+
+            scale = 2147483648.0
+
+        else:
+            return None, None
+
+        if channels > 1:
+            raw = raw.reshape(-1, channels).mean(axis=1)
+
+        y = raw / scale
+        y = np.nan_to_num(
+            y,
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        )
+
+        return y.astype(np.float32), int(sr)
+
     except Exception:
         return None, None
 
 
-# ── Feature extraction ────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Basic signal helpers
+# ---------------------------------------------------------------------------
+
+def _rms_track(y):
+    """
+    RMS energy at HOP intervals.
+    """
+
+    if y is None or len(y) == 0:
+        return np.array([], dtype=np.float64)
+
+    if LIBROSA_OK:
+        try:
+            rms = librosa.feature.rms(
+                y=y,
+                frame_length=FRAME,
+                hop_length=HOP,
+            )[0]
+
+            return np.asarray(rms, dtype=np.float64)
+
+        except Exception:
+            pass
+
+    # Numpy fallback
+    n = max(1, int(np.ceil(len(y) / HOP)))
+    out = np.zeros(n, dtype=np.float64)
+
+    for i in range(n):
+        start = i * HOP
+        end = min(start + FRAME, len(y))
+        segment = y[start:end]
+
+        if len(segment):
+            out[i] = float(
+                np.sqrt(np.mean(np.square(segment)))
+            )
+
+    return out
+
+
+def _frames_to_time(n, sr):
+    """
+    Convert frame indexes to seconds.
+    """
+
+    if n <= 0 or sr <= 0:
+        return np.array([], dtype=np.float64)
+
+    if LIBROSA_OK:
+        try:
+            return librosa.frames_to_time(
+                np.arange(n),
+                sr=sr,
+                hop_length=HOP,
+            )
+        except Exception:
+            pass
+
+    return np.arange(n, dtype=np.float64) * HOP / float(sr)
+
+
+def _safe_percentile(values, percentile, default=0.0):
+    values = np.asarray(values, dtype=float)
+
+    values = values[np.isfinite(values)]
+
+    if len(values) == 0:
+        return float(default)
+
+    return float(np.percentile(values, percentile))
+
+
+def _median_filter_1d(values, radius=2):
+    """
+    Small dependency-free median filter.
+    NaNs are ignored where possible.
+    """
+
+    values = np.asarray(values, dtype=float)
+
+    if len(values) < 3:
+        return values.copy()
+
+    result = values.copy()
+
+    for i in range(len(values)):
+        start = max(0, i - radius)
+        end = min(len(values), i + radius + 1)
+
+        window = values[start:end]
+        finite = window[np.isfinite(window)]
+
+        if len(finite):
+            result[i] = float(np.median(finite))
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Energy / activity detection
+# ---------------------------------------------------------------------------
+
+def _energy_gate(rms):
+    """
+    Estimate an adaptive vocal activity threshold.
+
+    We deliberately do NOT use a fixed amplitude threshold because
+    microphone levels vary significantly between laptops/phones/browsers.
+
+    Returns:
+        threshold, active_mask
+    """
+
+    rms = np.asarray(rms, dtype=float)
+
+    if len(rms) == 0:
+        return 0.0, np.zeros(0, dtype=bool)
+
+    finite = rms[np.isfinite(rms)]
+
+    if len(finite) == 0:
+        return 0.0, np.zeros(len(rms), dtype=bool)
+
+    peak = float(np.max(finite))
+
+    if peak <= 1e-7:
+        return 1e-7, np.zeros(len(rms), dtype=bool)
+
+    # Noise estimate.
+    noise_floor = _safe_percentile(
+        finite,
+        10,
+        default=0.0,
+    )
+
+    # A relative threshold also handles quiet microphones.
+    relative_gate = peak * 0.035
+
+    # Keep a small absolute floor.
+    absolute_floor = 10 ** (-50 / 20)
+
+    threshold = max(
+        absolute_floor,
+        noise_floor * 2.5,
+        relative_gate,
+    )
+
+    active = rms >= threshold
+
+    # Do not allow the activity detector to mark everything as inactive
+    # just because the recording is quiet.
+    if np.mean(active) < 0.05 and peak > absolute_floor * 2:
+        relaxed_gate = max(
+            absolute_floor,
+            peak * 0.015,
+        )
+
+        active = rms >= relaxed_gate
+        threshold = relaxed_gate
+
+    return float(threshold), active
+
+
+def _smooth_boolean_mask(mask, min_run_frames=3):
+    """
+    Remove very short true/false islands from an activity mask.
+
+    This prevents individual pYIN/RMS frame fluctuations from becoming
+    feedback events.
+    """
+
+    mask = np.asarray(mask, dtype=bool).copy()
+
+    if len(mask) < 2:
+        return mask
+
+    # Fill short false gaps between active regions.
+    i = 0
+
+    while i < len(mask):
+        if mask[i]:
+            i += 1
+            continue
+
+        start = i
+
+        while i < len(mask) and not mask[i]:
+            i += 1
+
+        end = i
+
+        if (
+            start > 0
+            and end < len(mask)
+            and (end - start) <= min_run_frames
+        ):
+            mask[start:end] = True
+
+    # Remove very short active islands.
+    i = 0
+
+    while i < len(mask):
+        if not mask[i]:
+            i += 1
+            continue
+
+        start = i
+
+        while i < len(mask) and mask[i]:
+            i += 1
+
+        end = i
+
+        if (
+            start > 0
+            and end < len(mask)
+            and (end - start) <= min_run_frames
+        ):
+            mask[start:end] = False
+
+    return mask
+
+
+# ---------------------------------------------------------------------------
+# Pitch tracking
+# ---------------------------------------------------------------------------
 
 def _pitch_track_fallback(y, sr):
-    """YIN-inspired pitch detection — no numba required."""
-    fmin, fmax = 65.0, 1050.0
-    min_period = max(2, int(sr / fmax))
-    max_period = min(FRAME // 2, int(sr / fmin))
+    """
+    Dependency-light fallback pitch detector.
 
-    f0_list, vf_list = [], []
-    win = np.hanning(FRAME)
+    This is only a backup. The normal production path uses librosa.pyin.
+    """
 
-    for start in range(0, len(y) - FRAME + 1, HOP):
-        frame = y[start: start + FRAME]
-        frame = frame - frame.mean()           # zero-mean
-        energy = float(np.dot(frame, frame))
-        if energy < 1e-9:
+    fmin = MIN_F0
+    fmax = min(
+        MAX_F0,
+        max(MIN_F0 + 100.0, sr * 0.45),
+    )
+
+    min_period = max(
+        2,
+        int(sr / fmax),
+    )
+
+    max_period = min(
+        FRAME // 2,
+        int(sr / fmin),
+    )
+
+    f0_list = []
+    vf_list = []
+
+    window = np.hanning(FRAME)
+
+    for start in range(
+        0,
+        max(0, len(y) - FRAME + 1),
+        HOP,
+    ):
+        frame = y[start:start + FRAME]
+
+        if len(frame) < FRAME:
+            break
+
+        frame = frame - np.mean(frame)
+
+        energy = float(
+            np.mean(np.square(frame))
+        )
+
+        if energy < 1e-7:
             f0_list.append(np.nan)
             vf_list.append(False)
             continue
 
-        frame_w = frame * win
+        weighted = frame * window
 
-        # Normalized autocorrelation
-        corr = np.correlate(frame_w, frame_w, mode="full")[FRAME - 1:]
-        corr_norm = corr / (corr[0] + 1e-10)
+        corr = np.correlate(
+            weighted,
+            weighted,
+            mode="full",
+        )[FRAME - 1:]
 
-        # YIN difference function d[tau] = 2*r[0] - 2*r[tau]
-        # Cumulative mean normalised difference for voiced/unvoiced decision
-        d = 2.0 * (corr_norm[0] - corr_norm[min_period: max_period + 1])
+        if len(corr) <= max_period:
+            f0_list.append(np.nan)
+            vf_list.append(False)
+            continue
+
+        if corr[0] <= 1e-12:
+            f0_list.append(np.nan)
+            vf_list.append(False)
+            continue
+
+        corr_norm = corr / (corr[0] + 1e-12)
+
+        d = 2.0 * (
+            corr_norm[0]
+            - corr_norm[min_period:max_period + 1]
+        )
+
         if len(d) == 0:
             f0_list.append(np.nan)
             vf_list.append(False)
             continue
 
-        # Cumulative mean normalisation
-        cum = np.cumsum(d)
-        idx = np.arange(1, len(d) + 1)
-        cmnd = np.where(idx > 0, d * idx / (cum + 1e-10), 1.0)
+        cumulative = np.cumsum(d)
+        indexes = np.arange(
+            1,
+            len(d) + 1,
+        )
 
-        # Find first dip below threshold
-        threshold = 0.18
-        dip_candidates = np.where(cmnd < threshold)[0]
-        if len(dip_candidates) > 0:
-            tau = int(dip_candidates[0]) + min_period
+        cmnd = np.where(
+            cumulative > 1e-12,
+            d * indexes / (cumulative + 1e-12),
+            1.0,
+        )
+
+        candidates = np.where(
+            cmnd < 0.20
+        )[0]
+
+        if len(candidates):
+            tau = int(candidates[0]) + min_period
         else:
             tau = int(np.argmin(cmnd)) + min_period
 
-        # Parabolic interpolation for sub-sample accuracy
-        if 0 < tau < len(corr_norm) - 1:
-            a, b, c = corr_norm[tau - 1], corr_norm[tau], corr_norm[tau + 1]
-            denom = 2.0 * (2 * b - a - c)
-            refined = tau + (c - a) / (denom + 1e-10) if abs(denom) > 1e-6 else tau
-        else:
-            refined = tau
-
-        voiced = len(dip_candidates) > 0 or float(np.min(cmnd)) < 0.30
-        if voiced and refined > 0:
-            f0_list.append(sr / max(refined, 1.0))
-            vf_list.append(True)
-        else:
+        if tau <= 0 or tau >= len(corr_norm):
             f0_list.append(np.nan)
             vf_list.append(False)
+            continue
+
+        voiced = (
+            len(candidates) > 0
+            or float(np.min(cmnd)) < 0.30
+        )
+
+        if not voiced:
+            f0_list.append(np.nan)
+            vf_list.append(False)
+            continue
+
+        f0 = sr / float(tau)
+
+        if not (
+            MIN_F0 <= f0 <= MAX_F0
+        ):
+            f0_list.append(np.nan)
+            vf_list.append(False)
+            continue
+
+        f0_list.append(f0)
+        vf_list.append(True)
 
     if not f0_list:
-        n = len(y) // HOP + 1
-        return np.full(n, np.nan), np.zeros(n, dtype=bool)
+        return (
+            np.array([], dtype=float),
+            np.array([], dtype=bool),
+        )
 
-    f0 = np.array(f0_list, dtype=np.float64)
-    vf = np.array(vf_list, dtype=bool)
+    f0 = np.asarray(
+        f0_list,
+        dtype=float,
+    )
 
-    # 3-point median smoothing on voiced runs to suppress octave errors
+    voiced = np.asarray(
+        vf_list,
+        dtype=bool,
+    )
+
+    return f0, voiced
+
+
+def _remove_pitch_outliers(f0, voiced_flag):
+    """
+    Remove obvious octave jumps and isolated pitch outliers.
+
+    This is important because a single 2x/0.5x pYIN error can massively
+    distort a cents-based pitch stability score.
+    """
+
+    f0 = np.asarray(
+        f0,
+        dtype=float,
+    ).copy()
+
+    voiced = np.asarray(
+        voiced_flag,
+        dtype=bool,
+    ).copy()
+
+    n = min(
+        len(f0),
+        len(voiced),
+    )
+
+    f0 = f0[:n]
+    voiced = voiced[:n]
+
+    valid = (
+        voiced
+        & np.isfinite(f0)
+        & (f0 >= MIN_F0)
+        & (f0 <= MAX_F0)
+    )
+
+    f0[~valid] = np.nan
+    voiced = valid
+
+    if np.sum(valid) < 5:
+        return f0, voiced
+
+    # First remove isolated octave jumps using local neighbors.
     for i in range(1, len(f0) - 1):
-        if vf[i - 1] and vf[i] and vf[i + 1]:
-            f0[i] = float(np.median([f0[i - 1], f0[i], f0[i + 1]]))
 
-    return f0, vf
+        if not (
+            voiced[i - 1]
+            and voiced[i]
+            and voiced[i + 1]
+        ):
+            continue
+
+        previous = f0[i - 1]
+        current = f0[i]
+        following = f0[i + 1]
+
+        if not (
+            np.isfinite(previous)
+            and np.isfinite(current)
+            and np.isfinite(following)
+        ):
+            continue
+
+        median_neighbor = float(
+            np.median([
+                previous,
+                following,
+            ])
+        )
+
+        if median_neighbor <= 0:
+            continue
+
+        ratio = current / median_neighbor
+
+        # Strong octave relationship.
+        if (
+            ratio > 1.75
+            or ratio < 0.57
+        ):
+            f0[i] = median_neighbor
+
+    # Rolling median removes remaining isolated spikes.
+    smoothed = _median_filter_1d(
+        f0,
+        radius=2,
+    )
+
+    # Only replace points that are not wildly different from the local
+    # median. This preserves natural vibrato.
+    for i in range(len(f0)):
+
+        if not voiced[i]:
+            continue
+
+        local_start = max(
+            0,
+            i - 2,
+        )
+
+        local_end = min(
+            len(f0),
+            i + 3,
+        )
+
+        local = f0[local_start:local_end]
+
+        local = local[
+            np.isfinite(local)
+        ]
+
+        if len(local) < 3:
+            continue
+
+        local_median = float(
+            np.median(local)
+        )
+
+        if local_median <= 0:
+            continue
+
+        ratio = f0[i] / local_median
+
+        if (
+            ratio > 1.65
+            or ratio < 0.60
+        ):
+            f0[i] = smoothed[i]
+
+    return f0, voiced
 
 
-def _pitch_track(y, sr):
-    """Return (f0_hz, voiced_flag) at HOP intervals using pyin, with fallback."""
+def _pitch_track(y, sr, rms=None):
+    """
+    Return:
+
+        f0_hz
+        voiced_flag
+
+    using pYIN when available.
+    """
+
+    if rms is None:
+        rms = _rms_track(y)
+
     if LIBROSA_OK:
+
         try:
-            f0, vf, _ = librosa.pyin(
+            fmin = max(
+                librosa.note_to_hz("C2"),
+                MIN_F0,
+            )
+
+            fmax = min(
+                librosa.note_to_hz("C7"),
+                MAX_F0,
+                sr * 0.45,
+            )
+
+            if fmax <= fmin:
+                fmax = min(
+                    sr * 0.45,
+                    MIN_F0 + 600,
+                )
+
+            f0, voiced_flag, voiced_prob = librosa.pyin(
                 y,
-                fmin=librosa.note_to_hz("C2"),
-                fmax=librosa.note_to_hz("C7"),
+                fmin=fmin,
+                fmax=fmax,
                 sr=sr,
                 hop_length=HOP,
+                frame_length=FRAME,
+                fill_na=np.nan,
             )
-            f0 = np.where(vf, f0, np.nan)
-            return f0, vf.astype(bool)
+
+            f0 = np.asarray(
+                f0,
+                dtype=float,
+            )
+
+            voiced_flag = np.asarray(
+                voiced_flag,
+                dtype=bool,
+            )
+
+            voiced_prob = np.asarray(
+                voiced_prob,
+                dtype=float,
+            )
+
+            n = min(
+                len(f0),
+                len(voiced_flag),
+                len(voiced_prob),
+                len(rms),
+            )
+
+            f0 = f0[:n]
+            voiced_flag = voiced_flag[:n]
+            voiced_prob = voiced_prob[:n]
+
+            # Energy gate.
+            _, active = _energy_gate(
+                rms[:n]
+            )
+
+            # pYIN can be uncertain at very quiet frames.
+            # Do not accept those frames as reliable pitch.
+            reliable = (
+                voiced_flag
+                & np.isfinite(f0)
+                & (voiced_prob >= 0.45)
+                & active
+            )
+
+            f0[~reliable] = np.nan
+            voiced_flag = reliable
+
+            f0, voiced_flag = _remove_pitch_outliers(
+                f0,
+                voiced_flag,
+            )
+
+            return f0, voiced_flag
+
         except Exception:
             pass
-    return _pitch_track_fallback(y, sr)
+
+    # Fallback path
+    f0, voiced = _pitch_track_fallback(
+        y,
+        sr,
+    )
+
+    if len(rms):
+        _, active = _energy_gate(rms)
+
+        n = min(
+            len(f0),
+            len(voiced),
+            len(active),
+        )
+
+        f0 = f0[:n]
+        voiced = (
+            voiced[:n]
+            & active[:n]
+        )
+
+        f0[~voiced] = np.nan
+
+    return _remove_pitch_outliers(
+        f0,
+        voiced,
+    )
 
 
-def _rms_track(y):
-    """Return RMS energy array at HOP intervals."""
-    if LIBROSA_OK:
-        try:
-            return librosa.feature.rms(y=y, frame_length=FRAME, hop_length=HOP)[0]
-        except Exception:
-            pass
-    n = len(y) // HOP + 1
-    out = np.zeros(n)
-    for i in range(n):
-        seg = y[i * HOP: i * HOP + FRAME]
-        out[i] = float(np.sqrt(np.mean(seg ** 2))) if len(seg) else 0.0
-    return out
-
-
-def _frames_to_time(n, sr):
-    if LIBROSA_OK:
-        return librosa.frames_to_time(np.arange(n), sr=sr, hop_length=HOP)
-    return np.arange(n) * HOP / sr
-
-
-# ── Scoring primitives ────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Pitch scoring
+# ---------------------------------------------------------------------------
 
 def _pitch_stability(f0):
-    voiced = f0[~np.isnan(f0)]
-    if len(voiced) < 5:
+    """
+    Robust pitch stability score.
+
+    Uses median absolute deviation rather than raw standard deviation.
+    This prevents one bad pYIN frame from destroying the entire score.
+
+    Natural vibrato is therefore treated more gently.
+    """
+
+    f0 = np.asarray(
+        f0,
+        dtype=float,
+    )
+
+    voiced = f0[
+        np.isfinite(f0)
+        & (f0 >= MIN_F0)
+        & (f0 <= MAX_F0)
+    ]
+
+    if len(voiced) < MIN_VOICED_FRAMES:
         return 50
-    window = max(10, int(len(voiced) // 5))
-    stds = []
-    for i in range(0, len(voiced), window):
-        seg = voiced[i: i + window]
-        if len(seg) < 3:
+
+    # Work in cents around a local median.
+    window_size = max(
+        12,
+        len(voiced) // 5,
+    )
+
+    deviations = []
+
+    for start in range(
+        0,
+        len(voiced),
+        window_size,
+    ):
+
+        segment = voiced[
+            start:start + window_size
+        ]
+
+        if len(segment) < 5:
             continue
-        med = np.nanmedian(seg)
-        if med < 1:
+
+        median_pitch = float(
+            np.median(segment)
+        )
+
+        if median_pitch <= 0:
             continue
-        cents = 1200 * np.log2(np.clip(seg / med, 1e-6, None))
-        stds.append(float(np.std(cents)))
-    if not stds:
+
+        cents = (
+            1200.0
+            * np.log2(
+                np.clip(
+                    segment / median_pitch,
+                    0.5,
+                    2.0,
+                )
+            )
+        )
+
+        median_cents = float(
+            np.median(cents)
+        )
+
+        mad = float(
+            np.median(
+                np.abs(
+                    cents
+                    - median_cents
+                )
+            )
+        )
+
+        # Convert MAD to an approximate robust standard deviation.
+        robust_std = mad * 1.4826
+
+        deviations.append(
+            robust_std
+        )
+
+    if not deviations:
         return 50
-    mean_std = float(np.mean(stds))
-    # ≤10 cents → 95, 60 cents → 40
-    return int(np.clip(np.interp(mean_std, [0, 10, 30, 60, 100], [97, 90, 70, 45, 25]), 0, 100))
+
+    pitch_error = float(
+        np.median(deviations)
+    )
+
+    # Conservative scoring:
+    #
+    # <= 8 cents   excellent
+    # 15 cents     very good
+    # 30 cents     acceptable
+    # 50 cents     needs work
+    # 80+ cents    poor
+    score = np.interp(
+        pitch_error,
+        [
+            5,
+            10,
+            20,
+            35,
+            55,
+            80,
+            120,
+        ],
+        [
+            97,
+            94,
+            86,
+            75,
+            60,
+            40,
+            20,
+        ],
+    )
+
+    return int(
+        np.clip(
+            score,
+            0,
+            100,
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# Vocal energy / consistency scoring
+# ---------------------------------------------------------------------------
+
+def _vocal_energy_score(rms, active_mask):
+    """
+    Score steadiness of vocal energy.
+
+    Important:
+        This is NOT a measurement of physical airflow.
+
+    It measures microphone-recorded vocal energy consistency.
+    """
+
+    rms = np.asarray(
+        rms,
+        dtype=float,
+    )
+
+    active_mask = np.asarray(
+        active_mask,
+        dtype=bool,
+    )
+
+    n = min(
+        len(rms),
+        len(active_mask),
+    )
+
+    if n == 0:
+        return 50
+
+    active_rms = rms[:n][
+        active_mask[:n]
+    ]
+
+    active_rms = active_rms[
+        np.isfinite(active_rms)
+        & (active_rms > 1e-7)
+    ]
+
+    if len(active_rms) < 5:
+        return 60
+
+    median_rms = float(
+        np.median(active_rms)
+    )
+
+    if median_rms <= 1e-8:
+        return 50
+
+    # Robust variation instead of standard deviation.
+    q25 = float(
+        np.percentile(
+            active_rms,
+            25,
+        )
+    )
+
+    q75 = float(
+        np.percentile(
+            active_rms,
+            75,
+        )
+    )
+
+    robust_cv = (
+        (q75 - q25)
+        / (2.0 * median_rms + 1e-9)
+    )
+
+    score = np.interp(
+        robust_cv,
+        [
+            0.02,
+            0.06,
+            0.12,
+            0.20,
+            0.32,
+            0.50,
+        ],
+        [
+            98,
+            94,
+            87,
+            75,
+            58,
+            35,
+        ],
+    )
+
+    return int(
+        np.clip(
+            score,
+            0,
+            100,
+        )
+    )
 
 
 def _breath_support(rms, voiced_flag):
-    n = min(len(rms), len(voiced_flag))
-    vr = rms[:n][voiced_flag[:n]]
-    if len(vr) < 3:
-        return 65
-    cv = float(np.std(vr)) / (float(np.mean(vr)) + 1e-9)
-    return int(np.clip(np.interp(cv, [0, 0.1, 0.25, 0.45, 0.7], [95, 88, 70, 50, 28]), 0, 100))
+    """
+    Backward-compatible name.
+
+    The microphone cannot directly measure diaphragm airflow.
+    Therefore this score represents vocal-energy steadiness and
+    sustained vocal presence.
+    """
+
+    n = min(
+        len(rms),
+        len(voiced_flag),
+    )
+
+    if n == 0:
+        return 50
+
+    rms = np.asarray(
+        rms[:n],
+        dtype=float,
+    )
+
+    voiced_flag = np.asarray(
+        voiced_flag[:n],
+        dtype=bool,
+    )
+
+    _, active = _energy_gate(
+        rms
+    )
+
+    useful = (
+        voiced_flag
+        | active
+    )
+
+    return _vocal_energy_score(
+        rms,
+        useful,
+    )
 
 
-def _continuity(voiced_flag):
+# ---------------------------------------------------------------------------
+# Continuity / gap detection
+# ---------------------------------------------------------------------------
+
+def _gap_mask(rms, voiced_flag, sr):
+    """
+    Detect genuine silence/gap candidates.
+
+    A frame is considered part of a gap only when:
+        1. audio energy is genuinely low
+        2. pYIN does not detect a voiced signal
+        3. the low-energy region persists
+
+    This avoids turning a single pYIN uncertainty into "Gap detected".
+    """
+
+    n = min(
+        len(rms),
+        len(voiced_flag),
+    )
+
+    if n == 0:
+        return np.zeros(0, dtype=bool)
+
+    rms = np.asarray(
+        rms[:n],
+        dtype=float,
+    )
+
+    voiced_flag = np.asarray(
+        voiced_flag[:n],
+        dtype=bool,
+    )
+
+    _, active = _energy_gate(
+        rms
+    )
+
+    # Estimate the typical vocal energy.
+    voiced_rms = rms[
+        voiced_flag
+        & np.isfinite(rms)
+        & (rms > 1e-7)
+    ]
+
+    if len(voiced_rms) < 5:
+        voiced_rms = rms[
+            active
+            & np.isfinite(rms)
+            & (rms > 1e-7)
+        ]
+
+    if len(voiced_rms) == 0:
+        return np.zeros(
+            n,
+            dtype=bool,
+        )
+
+    typical_energy = float(
+        np.median(voiced_rms)
+    )
+
+    if typical_energy <= 1e-8:
+        return np.zeros(
+            n,
+            dtype=bool,
+        )
+
+    # A real gap should be substantially quieter than the singing.
+    silence_threshold = max(
+        typical_energy * 0.13,
+        10 ** (-50 / 20),
+    )
+
+    low_energy = rms < silence_threshold
+
+    candidate = (
+        low_energy
+        & ~voiced_flag
+    )
+
+    # Convert minimum gap duration to frames.
+    frames_required = max(
+        3,
+        int(
+            MIN_GAP_SECONDS
+            * sr
+            / HOP
+        ),
+    )
+
+    candidate = _smooth_boolean_mask(
+        candidate,
+        min_run_frames=2,
+    )
+
+    # Keep only runs long enough to represent an actual gap.
+    final = np.zeros(
+        n,
+        dtype=bool,
+    )
+
+    i = 0
+
+    while i < n:
+
+        if not candidate[i]:
+            i += 1
+            continue
+
+        start = i
+
+        while (
+            i < n
+            and candidate[i]
+        ):
+            i += 1
+
+        end = i
+
+        if (
+            end - start
+            >= frames_required
+        ):
+            final[start:end] = True
+
+    return final
+
+
+def _continuity(
+    voiced_flag,
+    rms=None,
+    sr=None,
+):
+    """
+    Continuity score based on actual sustained gaps, not every
+    pYIN unvoiced frame.
+    """
+
     if len(voiced_flag) == 0:
         return 50
-    gaps = int(np.sum(np.diff(voiced_flag.astype(int)) == -1))
-    rate = gaps / max(len(voiced_flag), 1)
-    return int(np.clip(np.interp(rate, [0, 0.02, 0.05, 0.12, 0.25], [96, 85, 65, 45, 22]), 0, 100))
 
+    if rms is None or sr is None:
+        # Conservative fallback.
+        voiced_ratio = float(
+            np.mean(voiced_flag)
+        )
+
+        return int(
+            np.clip(
+                voiced_ratio * 100,
+                30,
+                96,
+            )
+        )
+
+    gaps = _gap_mask(
+        rms,
+        voiced_flag,
+        sr,
+    )
+
+    gap_ratio = (
+        float(np.mean(gaps))
+        if len(gaps)
+        else 0.0
+    )
+
+    # Start from a high score and penalize sustained gaps.
+    score = 96.0 - (
+        gap_ratio * 180.0
+    )
+
+    # If almost no voice was detected, don't pretend continuity was good.
+    voiced_ratio = float(
+        np.mean(voiced_flag)
+    )
+
+    if voiced_ratio < 0.15:
+        score -= 25
+
+    elif voiced_ratio < 0.30:
+        score -= 10
+
+    return int(
+        np.clip(
+            score,
+            20,
+            98,
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# Onset scoring
+# ---------------------------------------------------------------------------
 
 def _onset_smoothness(y, sr):
+    """
+    Estimate onset smoothness from changes in recorded vocal energy.
+
+    This is an acoustic measurement, not a physiological measurement.
+    """
+
     if not LIBROSA_OK:
         return 70
+
     try:
-        frames = librosa.onset.onset_detect(y=y, sr=sr, hop_length=HOP)
         rms = _rms_track(y)
+
+        if len(rms) < 8:
+            return 70
+
+        onset_frames = librosa.onset.onset_detect(
+            y=y,
+            sr=sr,
+            hop_length=HOP,
+            backtrack=False,
+        )
+
+        if len(onset_frames) == 0:
+            return 75
+
         scores = []
-        for of in frames:
-            pre = float(np.mean(rms[max(0, of - 6): of])) if of > 0 else 0.0
-            post = float(np.mean(rms[of: of + 6])) if of < len(rms) else 0.0
-            if post < 1e-7:
+
+        for frame in onset_frames:
+
+            frame = int(frame)
+
+            before_start = max(
+                0,
+                frame - 5,
+            )
+
+            before_end = frame
+
+            after_start = frame
+
+            after_end = min(
+                len(rms),
+                frame + 5,
+            )
+
+            before = rms[
+                before_start:before_end
+            ]
+
+            after = rms[
+                after_start:after_end
+            ]
+
+            if len(after) == 0:
                 continue
-            rise = (post - pre) / post  # 0=gradual, 1=abrupt
-            scores.append(rise)
+
+            pre = float(
+                np.median(before)
+            ) if len(before) else 0.0
+
+            post = float(
+                np.median(after)
+            )
+
+            if post <= 1e-7:
+                continue
+
+            rise = (
+                post - pre
+            ) / post
+
+            rise = float(
+                np.clip(
+                    rise,
+                    0.0,
+                    1.0,
+                )
+            )
+
+            # Very abrupt rise = lower score.
+            onset_score = np.interp(
+                rise,
+                [
+                    0.05,
+                    0.20,
+                    0.40,
+                    0.65,
+                    0.85,
+                    1.00,
+                ],
+                [
+                    96,
+                    94,
+                    88,
+                    76,
+                    58,
+                    40,
+                ],
+            )
+
+            scores.append(
+                onset_score
+            )
+
         if not scores:
             return 72
-        mean_rise = float(np.mean(scores))
-        return int(np.clip(np.interp(mean_rise, [0, 0.3, 0.6, 0.85, 1.0], [95, 85, 65, 45, 28]), 0, 100))
+
+        return int(
+            np.clip(
+                np.median(scores),
+                0,
+                100,
+            )
+        )
+
     except Exception:
         return 70
 
 
+# ---------------------------------------------------------------------------
+# General metrics
+# ---------------------------------------------------------------------------
+
 def _voiced_pct(voiced_flag):
     if len(voiced_flag) == 0:
         return 0.0
-    return float(np.sum(voiced_flag)) / len(voiced_flag)
+
+    return float(
+        np.mean(voiced_flag)
+    )
 
 
-# ── Per-exercise subscores ────────────────────────────────────────────────────
+def _voice_presence_score(
+    f0,
+    voiced_flag,
+    active_mask,
+):
+    """
+    Score how much of the recording contains reliable vocal material.
+
+    This is deliberately separated from continuity.
+    """
+
+    n = min(
+        len(f0),
+        len(voiced_flag),
+        len(active_mask),
+    )
+
+    if n == 0:
+        return 0
+
+    reliable_pitch = (
+        voiced_flag[:n]
+        & np.isfinite(f0[:n])
+    )
+
+    active = active_mask[:n]
+
+    reliable_ratio = float(
+        np.mean(reliable_pitch)
+    )
+
+    active_ratio = float(
+        np.mean(active)
+    )
+
+    # Reliable vocal frames are more valuable than raw amplitude.
+    score = (
+        reliable_ratio * 0.75
+        + active_ratio * 0.25
+    ) * 100.0
+
+    return int(
+        np.clip(
+            score,
+            0,
+            100,
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# Exercise scoring
+# ---------------------------------------------------------------------------
 
 _WEIGHTS = {
     "warm_up":          [0.40, 0.35, 0.25],
@@ -255,158 +1485,720 @@ _WEIGHTS = {
 }
 
 
-def _subscores(y, sr, f0, voiced_flag, rms, exercise_type):
-    ps  = _pitch_stability(f0)
-    bs  = _breath_support(rms, voiced_flag)
-    con = _continuity(voiced_flag)
-    ons = _onset_smoothness(y, sr)
-    prs = min(100, int(_voiced_pct(voiced_flag) * 130))
+def _subscores(
+    y,
+    sr,
+    f0,
+    voiced_flag,
+    rms,
+    exercise_type,
+):
+    """
+    Generate the three dimensions expected by the current UI.
+    """
+
+    _, active = _energy_gate(
+        rms
+    )
+
+    ps = _pitch_stability(
+        f0
+    )
+
+    energy = _breath_support(
+        rms,
+        voiced_flag,
+    )
+
+    continuity = _continuity(
+        voiced_flag,
+        rms,
+        sr,
+    )
+
+    onset = _onset_smoothness(
+        y,
+        sr,
+    )
+
+    presence = _voice_presence_score(
+        f0,
+        voiced_flag,
+        active,
+    )
 
     table = {
-        "warm_up":          {"Pitch Stability": ps,   "Breath Support": bs,   "Consistency": con},
-        "range_finder":     {"Range Clarity": ps,     "Voice Presence": prs,  "Transitions": con},
-        "ear_training":     {"Pitch Accuracy": ps,    "Intonation": ps,       "Voice Presence": prs},
-        "breath_support":   {"Airflow Steadiness": bs,"Support Duration": con,"Consistency": bs},
-        "silent_breath":    {"Breath Control": bs,    "Support Duration": con,"Consistency": bs},
-        "smooth_onset":     {"Attack Smoothness": ons,"Consistency": ps,      "Tone Quality": bs},
-        "legato":           {"Continuity": con,       "Phrase Shape": ps,     "Onset Smoothness": ons},
-        "scale":            {"Pitch Accuracy": ps,    "Evenness": bs,         "Smoothness": ons},
-        "staccato":         {"Articulation": ons,     "Pitch Accuracy": ps,   "Consistency": bs},
-        "scale_ascending":  {"Pitch Accuracy": ps,    "Evenness": bs,         "Range": prs},
-        "scale_descending": {"Pitch Accuracy": ps,    "Control": bs,          "Consistency": con},
-        "minor_scale":      {"Pitch Accuracy": ps,    "Tone Quality": bs,     "Consistency": con},
-        "intervals":        {"Interval Accuracy": ps, "Intonation": ps,       "Confidence": prs},
-        "arpeggios":        {"Pitch Accuracy": ps,    "Agility": ons,         "Consistency": con},
-        "pitch_stability":  {"Pitch Stability": ps,   "Vibrato Control": max(0, ps - 8), "Sustain": con},
+
+        "warm_up": {
+            "Pitch Stability": ps,
+            "Breath Support": energy,
+            "Consistency": continuity,
+        },
+
+        "range_finder": {
+            "Range Clarity": ps,
+            "Voice Presence": presence,
+            "Transitions": continuity,
+        },
+
+        "ear_training": {
+            "Pitch Accuracy": ps,
+            "Intonation": ps,
+            "Voice Presence": presence,
+        },
+
+        "breath_support": {
+            "Airflow Steadiness": energy,
+            "Support Duration": continuity,
+            "Consistency": energy,
+        },
+
+        "silent_breath": {
+            "Breath Control": energy,
+            "Support Duration": continuity,
+            "Consistency": energy,
+        },
+
+        "smooth_onset": {
+            "Attack Smoothness": onset,
+            "Consistency": ps,
+            "Tone Quality": energy,
+        },
+
+        "legato": {
+            "Continuity": continuity,
+            "Phrase Shape": ps,
+            "Onset Smoothness": onset,
+        },
+
+        "scale": {
+            "Pitch Accuracy": ps,
+            "Evenness": energy,
+            "Smoothness": onset,
+        },
+
+        "staccato": {
+            "Articulation": onset,
+            "Pitch Accuracy": ps,
+            "Consistency": energy,
+        },
+
+        "scale_ascending": {
+            "Pitch Accuracy": ps,
+            "Evenness": energy,
+            "Range": presence,
+        },
+
+        "scale_descending": {
+            "Pitch Accuracy": ps,
+            "Control": energy,
+            "Consistency": continuity,
+        },
+
+        "minor_scale": {
+            "Pitch Accuracy": ps,
+            "Tone Quality": energy,
+            "Consistency": continuity,
+        },
+
+        "intervals": {
+            "Interval Accuracy": ps,
+            "Intonation": ps,
+            "Confidence": presence,
+        },
+
+        "arpeggios": {
+            "Pitch Accuracy": ps,
+            "Agility": onset,
+            "Consistency": continuity,
+        },
+
+        "pitch_stability": {
+            "Pitch Stability": ps,
+            "Vibrato Control": max(
+                0,
+                ps - 5,
+            ),
+            "Sustain": continuity,
+        },
     }
-    return table.get(exercise_type, {"Pitch Stability": ps, "Breath Support": bs, "Consistency": con})
+
+    return table.get(
+        exercise_type,
+        {
+            "Pitch Stability": ps,
+            "Breath Support": energy,
+            "Consistency": continuity,
+        },
+    )
 
 
-def _weighted_score(sub, exercise_type):
-    vals  = list(sub.values())
-    ws    = _WEIGHTS.get(exercise_type, [1 / len(vals)] * len(vals))
-    if len(ws) != len(vals):
-        ws = [1 / len(vals)] * len(vals)
-    raw = sum(v * w for v, w in zip(vals, ws))
-    return int(np.clip(raw, 30, 100))
+def _weighted_score(
+    sub,
+    exercise_type,
+):
+    if not sub:
+        return 0
+
+    values = list(
+        sub.values()
+    )
+
+    weights = _WEIGHTS.get(
+        exercise_type
+    )
+
+    if (
+        not weights
+        or len(weights) != len(values)
+    ):
+        weights = [
+            1.0 / len(values)
+        ] * len(values)
+
+    raw = sum(
+        value * weight
+        for value, weight
+        in zip(values, weights)
+    )
+
+    return int(
+        np.clip(
+            raw,
+            0,
+            100,
+        )
+    )
 
 
 def _xp(score):
-    if score >= 90: return 150
-    if score >= 80: return 120
-    if score >= 70: return 100
-    if score >= 60: return 80
+    if score >= 90:
+        return 150
+
+    if score >= 80:
+        return 120
+
+    if score >= 70:
+        return 100
+
+    if score >= 60:
+        return 80
+
     return 50
 
 
-# ── Feedback generation ───────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Feedback helpers
+# ---------------------------------------------------------------------------
 
-def _ts(sec):
-    return f"{int(sec // 60)}:{int(sec % 60):02d}"
+def _ts(seconds):
+    seconds = max(
+        0.0,
+        float(seconds),
+    )
+
+    return (
+        f"{int(seconds // 60)}:"
+        f"{int(seconds % 60):02d}"
+    )
 
 
 def _range_notes(f0):
     if not LIBROSA_OK:
         return None, None
-    voiced = f0[~np.isnan(f0)]
+
+    voiced = f0[
+        np.isfinite(f0)
+    ]
+
     if len(voiced) < 5:
         return None, None
+
     try:
-        low  = librosa.hz_to_note(float(np.percentile(voiced, 5)),  octave=True)
-        high = librosa.hz_to_note(float(np.percentile(voiced, 95)), octave=True)
+        low = librosa.hz_to_note(
+            float(
+                np.percentile(
+                    voiced,
+                    5,
+                )
+            ),
+            octave=True,
+        )
+
+        high = librosa.hz_to_note(
+            float(
+                np.percentile(
+                    voiced,
+                    95,
+                )
+            ),
+            octave=True,
+        )
+
         return low, high
+
     except Exception:
         return None, None
 
 
-def _generate_feedback(y, sr, f0, voiced_flag, rms, times, exercise_type, duration):
-    fb = []
-    n = min(len(f0), len(voiced_flag), len(rms), len(times))
-    f0, voiced_flag, rms, times = f0[:n], voiced_flag[:n], rms[:n], times[:n]
+def _window_pitch_quality(segment):
+    """
+    Return robust pitch variation in cents.
+    """
 
-    # Opening note: centre pitch
-    all_voiced = f0[voiced_flag & ~np.isnan(f0)]
-    if len(all_voiced) >= 8 and LIBROSA_OK:
+    voiced = segment[
+        np.isfinite(segment)
+    ]
+
+    if len(voiced) < 6:
+        return None
+
+    median_pitch = float(
+        np.median(voiced)
+    )
+
+    if median_pitch <= 0:
+        return None
+
+    cents = (
+        1200.0
+        * np.log2(
+            np.clip(
+                voiced / median_pitch,
+                0.5,
+                2.0,
+            )
+        )
+    )
+
+    median_cents = float(
+        np.median(cents)
+    )
+
+    mad = float(
+        np.median(
+            np.abs(
+                cents
+                - median_cents
+            )
+        )
+    )
+
+    return mad * 1.4826
+
+
+def _generate_feedback(
+    y,
+    sr,
+    f0,
+    voiced_flag,
+    rms,
+    times,
+    exercise_type,
+    duration,
+):
+    """
+    Generate conservative, human-readable feedback.
+
+    Important design change:
+        Feedback is only generated when the evidence is strong enough.
+    """
+
+    feedback = []
+
+    n = min(
+        len(f0),
+        len(voiced_flag),
+        len(rms),
+        len(times),
+    )
+
+    if n == 0:
+        return feedback
+
+    f0 = f0[:n]
+    voiced_flag = voiced_flag[:n]
+    rms = rms[:n]
+    times = times[:n]
+
+    _, active = _energy_gate(
+        rms
+    )
+
+    gaps = _gap_mask(
+        rms,
+        voiced_flag,
+        sr,
+    )
+
+    # ------------------------------------------------------------------
+    # Opening pitch
+    # ------------------------------------------------------------------
+
+    all_voiced = f0[
+        np.isfinite(f0)
+    ]
+
+    if (
+        len(all_voiced)
+        >= MIN_VOICED_FRAMES
+        and LIBROSA_OK
+    ):
+
         try:
-            note = librosa.hz_to_note(float(np.nanmedian(all_voiced)), octave=True)
-            fb.append({"time": "0:00", "message": f"Pitch centres around {note}"})
+            note = librosa.hz_to_note(
+                float(
+                    np.median(
+                        all_voiced
+                    )
+                ),
+                octave=True,
+            )
+
+            feedback.append(
+                {
+                    "time": "0:00",
+                    "message": (
+                        f"Pitch centres around {note}"
+                    ),
+                }
+            )
+
         except Exception:
             pass
 
-    # Windowed analysis (~2 s segments)
-    win = max(1, int(2.0 * sr / HOP))
-    prev_rms_mean = None
+    # ------------------------------------------------------------------
+    # Windowed feedback
+    # ------------------------------------------------------------------
 
-    for w in range(0, n, win):
-        e = min(w + win, n)
-        if e - w < 4:
+    # About 1.5 seconds gives more localized feedback without being
+    # hypersensitive to tiny frame-level changes.
+    window_seconds = 1.5
+
+    window_frames = max(
+        1,
+        int(
+            window_seconds
+            * sr
+            / HOP
+        ),
+    )
+
+    for start in range(
+        0,
+        n,
+        window_frames,
+    ):
+
+        end = min(
+            start + window_frames,
+            n,
+        )
+
+        if end - start < 8:
             continue
-        mid = float(times[w + (e - w) // 2])
-        seg_f0 = f0[w:e]
-        seg_vf = voiced_flag[w:e]
-        seg_rms = rms[w:e]
-        voiced_f0 = seg_f0[seg_vf & ~np.isnan(seg_f0)]
-        voiced_rms = seg_rms[seg_vf]
-        rms_mean = float(np.mean(seg_rms))
-        voiced_pct = float(np.sum(seg_vf)) / (e - w)
 
-        # Pitch stability in window
-        if len(voiced_f0) >= 5:
-            med = float(np.nanmedian(voiced_f0))
-            if med > 1:
-                cents = 1200 * np.log2(np.clip(voiced_f0 / med, 1e-6, None))
-                std_c = float(np.std(cents))
-                if std_c > 65:
-                    fb.append({"time": _ts(mid), "message": "Pitch wavering — focus on a fixed target"})
-                elif std_c > 35:
-                    fb.append({"time": _ts(mid), "message": "Some pitch drift — try to lock in the note"})
-                elif std_c < 15 and len(voiced_f0) >= 12:
-                    fb.append({"time": _ts(mid), "message": "Clean, steady pitch here"})
+        mid_index = (
+            start
+            + (end - start) // 2
+        )
 
-        # Breath support drop
-        if prev_rms_mean is not None and rms_mean < prev_rms_mean * 0.50 and voiced_pct > 0.3:
-            fb.append({"time": _ts(mid), "message": "Breath support fading — push from the diaphragm"})
+        mid_time = float(
+            times[
+                min(
+                    mid_index,
+                    len(times) - 1,
+                )
+            ]
+        )
 
-        # Gap / silence mid-phrase
-        if voiced_pct < 0.15 and mid < duration * 0.85:
-            fb.append({"time": _ts(mid), "message": "Gap detected — try to sustain through the phrase"})
+        segment_f0 = f0[
+            start:end
+        ]
 
-        # Choppy airflow
-        if len(voiced_rms) > 4:
-            cv = float(np.std(voiced_rms)) / (float(np.mean(voiced_rms)) + 1e-9)
-            if cv > 0.55:
-                fb.append({"time": _ts(mid), "message": "Airflow uneven — aim for a smooth, steady stream"})
+        segment_voiced = voiced_flag[
+            start:end
+        ]
 
-        prev_rms_mean = rms_mean
+        segment_rms = rms[
+            start:end
+        ]
 
-    # Range detection for range finder exercise
+        segment_active = active[
+            start:end
+        ]
+
+        # --------------------------------------------------------------
+        # Pitch feedback
+        # --------------------------------------------------------------
+
+        pitch_error = _window_pitch_quality(
+            segment_f0
+        )
+
+        if pitch_error is not None:
+
+            if pitch_error >= 70:
+
+                feedback.append(
+                    {
+                        "time": _ts(mid_time),
+                        "message": (
+                            "Pitch is moving quite a bit "
+                            "— try to settle on the target note"
+                        ),
+                    }
+                )
+
+            elif pitch_error >= 42:
+
+                feedback.append(
+                    {
+                        "time": _ts(mid_time),
+                        "message": (
+                            "Some pitch drift here "
+                            "— try to hold the target more steadily"
+                        ),
+                    }
+                )
+
+            elif (
+                pitch_error <= 18
+                and np.sum(
+                    np.isfinite(segment_f0)
+                ) >= 12
+            ):
+
+                feedback.append(
+                    {
+                        "time": _ts(mid_time),
+                        "message": (
+                            "Pitch is steady here"
+                        ),
+                    }
+                )
+
+        # --------------------------------------------------------------
+        # True gap detection
+        # --------------------------------------------------------------
+
+        gap_frames = gaps[
+            start:end
+        ]
+
+        gap_ratio = (
+            float(
+                np.mean(gap_frames)
+            )
+            if len(gap_frames)
+            else 0.0
+        )
+
+        if (
+            gap_ratio >= 0.20
+            and mid_time > EDGE_IGNORE_SECONDS
+            and mid_time < (
+                duration
+                - EDGE_IGNORE_SECONDS
+            )
+        ):
+
+            feedback.append(
+                {
+                    "time": _ts(mid_time),
+                    "message": (
+                        "A sustained quiet gap was detected "
+                        "— try to keep the phrase connected"
+                    ),
+                }
+            )
+
+        # --------------------------------------------------------------
+        # Vocal energy feedback
+        # --------------------------------------------------------------
+
+        active_rms = segment_rms[
+            segment_active
+        ]
+
+        active_rms = active_rms[
+            np.isfinite(active_rms)
+            & (active_rms > 1e-7)
+        ]
+
+        if len(active_rms) >= 8:
+
+            median_energy = float(
+                np.median(
+                    active_rms
+                )
+            )
+
+            q25 = float(
+                np.percentile(
+                    active_rms,
+                    25,
+                )
+            )
+
+            q75 = float(
+                np.percentile(
+                    active_rms,
+                    75,
+                )
+            )
+
+            robust_cv = (
+                q75 - q25
+            ) / (
+                2.0
+                * median_energy
+                + 1e-9
+            )
+
+            if robust_cv >= 0.38:
+
+                feedback.append(
+                    {
+                        "time": _ts(mid_time),
+                        "message": (
+                            "Vocal energy is uneven "
+                            "— aim for a smoother, steadier volume"
+                        ),
+                    }
+                )
+
+        # --------------------------------------------------------------
+        # Avoid too many positive messages.
+        # Positive feedback is useful, but the user should primarily
+        # receive actionable feedback.
+        # --------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Range finder
+    # ------------------------------------------------------------------
+
     if exercise_type == "range_finder":
-        low, high = _range_notes(f0)
+
+        low, high = _range_notes(
+            f0
+        )
+
         if low and high:
-            fb.append({"time": _ts(duration * 0.9), "message": f"Detected range: {low} – {high}"})
 
-    # Deduplicate by message prefix and cap at 8
-    seen, out = set(), []
-    for item in fb:
-        key = item["message"][:35]
-        if key not in seen:
-            seen.add(key)
-            out.append(item)
-    return out[:8]
+            feedback.append(
+                {
+                    "time": _ts(
+                        max(
+                            0,
+                            duration * 0.90,
+                        )
+                    ),
+                    "message": (
+                        f"Detected range: {low} – {high}"
+                    ),
+                }
+            )
+
+    # ------------------------------------------------------------------
+    # Exercise-specific guidance
+    # ------------------------------------------------------------------
+
+    if exercise_type in {
+        "breath_support",
+        "silent_breath",
+    }:
+
+        if not any(
+            "energy" in item["message"].lower()
+            for item in feedback
+        ):
+
+            feedback.append(
+                {
+                    "time": "0:00",
+                    "message": (
+                        "Keep the vocal energy even "
+                        "through the sustained phrase"
+                    ),
+                }
+            )
+
+    # ------------------------------------------------------------------
+    # Deduplicate
+    # ------------------------------------------------------------------
+
+    seen = set()
+    cleaned = []
+
+    for item in feedback:
+
+        message = item.get(
+            "message",
+            "",
+        )
+
+        # Deduplicate exact messages.
+        key = message.strip().lower()
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        cleaned.append(item)
+
+    # Prefer actionable feedback over repeated positive feedback.
+    actionable = [
+        item
+        for item in cleaned
+        if any(
+            word in item["message"].lower()
+            for word in [
+                "try",
+                "gap",
+                "uneven",
+                "drift",
+                "moving",
+                "hold",
+                "target",
+                "connected",
+            ]
+        )
+    ]
+
+    positive = [
+        item
+        for item in cleaned
+        if item not in actionable
+    ]
+
+    result = (
+        actionable
+        + positive
+    )
+
+    return result[
+        :MAX_FEEDBACK_ITEMS
+    ]
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Exercise mapping
+# ---------------------------------------------------------------------------
 
 _EXERCISE_TYPE_MAP = {
+
     "0.1": "warm_up",
     "0.2": "range_finder",
     "0.3": "ear_training",
+
     "1.1": "breath_support",
     "1.2": "silent_breath",
     "1.3": "smooth_onset",
     "1.4": "legato",
     "1.5": "scale",
     "1.6": "staccato",
+
     "2.1": "scale_ascending",
     "2.2": "scale_descending",
     "2.3": "minor_scale",
@@ -417,67 +2209,320 @@ _EXERCISE_TYPE_MAP = {
 
 
 def exercise_type_from_id(exercise_id):
-    for key, val in _EXERCISE_TYPE_MAP.items():
-        if key in str(exercise_id):
-            return val
+    """
+    Convert exercise ID such as 0.1 into the internal exercise type.
+
+    Exact matches are preferred to avoid accidental substring matches.
+    """
+
+    value = str(
+        exercise_id
+    ).strip()
+
+    if value in _EXERCISE_TYPE_MAP:
+        return _EXERCISE_TYPE_MAP[
+            value
+        ]
+
+    # Backward compatibility for IDs such as:
+    # "0.1 Vocal Warm-Up"
+    for key, exercise_type in _EXERCISE_TYPE_MAP.items():
+
+        if value.startswith(key):
+            return exercise_type
+
     return "warm_up"
 
 
-def analyze_audio(audio_bytes, exercise_type="warm_up"):
+# ---------------------------------------------------------------------------
+# Public analysis API
+# ---------------------------------------------------------------------------
+
+def analyze_audio(
+    audio_bytes,
+    exercise_type="warm_up",
+):
     """
-    Analyse WAV bytes and return feedback_data dict:
+    Analyse recorded audio.
+
+    Returns:
+
     {
         "score": int,
         "xp": int,
-        "feedback": [{"time": str, "message": str}, ...],
-        "subscores": {dimension: int, ...},
+        "feedback": [
+            {
+                "time": str,
+                "message": str
+            }
+        ],
+        "subscores": {
+            ...
+        },
         "duration": float,
-        "pitch_data": {"f0": list, "times": list},  # for waveform overlay
+        "pitch_data": {
+            "f0": [...],
+            "times": [...]
+        }
     }
     """
+
     if not audio_bytes:
-        return _short_result()
+        return _short_result(
+            "No recording was received."
+        )
 
-    y, sr = _load_audio(audio_bytes)
-    if y is None or len(y) < int(sr * 0.4) if sr else True:
-        return _short_result()
+    # --------------------------------------------------------------
+    # Load
+    # --------------------------------------------------------------
 
-    duration = len(y) / sr
+    y, sr = _load_audio(
+        audio_bytes
+    )
 
-    f0, voiced_flag = _pitch_track(y, sr)
-    rms              = _rms_track(y)
-    n                = min(len(f0), len(voiced_flag), len(rms))
-    f0, voiced_flag, rms = f0[:n], voiced_flag[:n], rms[:n]
-    times            = _frames_to_time(n, sr)
+    if (
+        y is None
+        or sr is None
+        or sr <= 0
+        or len(y) == 0
+    ):
 
-    sub   = _subscores(y, sr, f0, voiced_flag, rms, exercise_type)
-    score = _weighted_score(sub, exercise_type)
-    xp    = _xp(score)
-    fb    = _generate_feedback(y, sr, f0, voiced_flag, rms, times, exercise_type, duration)
+        return _short_result(
+            "The recording could not be analysed. Please try again."
+        )
 
-    # Compact pitch data for waveform overlay (max 500 points)
-    step = max(1, n // 500)
+    duration = (
+        len(y)
+        / float(sr)
+    )
+
+    if duration < MIN_RECORDING_SECONDS:
+
+        return _short_result(
+            "Recording too short — hold the note for at least 1 second."
+        )
+
+    # --------------------------------------------------------------
+    # Remove DC offset
+    # --------------------------------------------------------------
+
+    y = y - np.mean(y)
+
+    # Prevent extreme values.
+    y = np.clip(
+        y,
+        -1.0,
+        1.0,
+    )
+
+    # --------------------------------------------------------------
+    # RMS first
+    # --------------------------------------------------------------
+
+    rms = _rms_track(
+        y
+    )
+
+    if len(rms) == 0:
+
+        return _short_result(
+            "No usable audio signal was detected."
+        )
+
+    # --------------------------------------------------------------
+    # Pitch
+    # --------------------------------------------------------------
+
+    f0, voiced_flag = _pitch_track(
+        y,
+        sr,
+        rms,
+    )
+
+    # --------------------------------------------------------------
+    # Align all frame arrays
+    # --------------------------------------------------------------
+
+    n = min(
+        len(f0),
+        len(voiced_flag),
+        len(rms),
+    )
+
+    if n <= 0:
+
+        return _short_result(
+            "No usable vocal signal was detected."
+        )
+
+    f0 = f0[:n]
+
+    voiced_flag = voiced_flag[
+        :n
+    ]
+
+    rms = rms[
+        :n
+    ]
+
+    times = _frames_to_time(
+        n,
+        sr,
+    )
+
+    # --------------------------------------------------------------
+    # Subscores
+    # --------------------------------------------------------------
+
+    subscores = _subscores(
+        y,
+        sr,
+        f0,
+        voiced_flag,
+        rms,
+        exercise_type,
+    )
+
+    score = _weighted_score(
+        subscores,
+        exercise_type,
+    )
+
+    xp = _xp(
+        score
+    )
+
+    # --------------------------------------------------------------
+    # Feedback
+    # --------------------------------------------------------------
+
+    feedback = _generate_feedback(
+        y,
+        sr,
+        f0,
+        voiced_flag,
+        rms,
+        times,
+        exercise_type,
+        duration,
+    )
+
+    # --------------------------------------------------------------
+    # Compact pitch data for UI waveform
+    # --------------------------------------------------------------
+
+    step = max(
+        1,
+        n // 500,
+    )
+
     pitch_data = {
-        "f0":    [float(v) if not np.isnan(v) else None for v in f0[::step]],
-        "times": [float(t) for t in times[::step]],
+        "f0": [
+            (
+                float(value)
+                if np.isfinite(value)
+                else None
+            )
+            for value
+            in f0[::step]
+        ],
+
+        "times": [
+            float(value)
+            for value
+            in times[::step]
+        ],
     }
 
+    # --------------------------------------------------------------
+    # Diagnostics
+    #
+    # Extra data is harmless to the current UI and is useful if you
+    # later want to display/debug Cloud vs local analysis.
+    # --------------------------------------------------------------
+
+    _, active_mask = _energy_gate(
+        rms
+    )
+
+    reliable_pitch_ratio = (
+        float(
+            np.mean(
+                voiced_flag
+            )
+        )
+        if len(voiced_flag)
+        else 0.0
+    )
+
+    active_ratio = (
+        float(
+            np.mean(
+                active_mask
+            )
+        )
+        if len(active_mask)
+        else 0.0
+    )
+
     return {
-        "score":      score,
-        "xp":         xp,
-        "feedback":   fb,
-        "subscores":  sub,
-        "duration":   duration,
+        "score": score,
+        "xp": xp,
+        "feedback": feedback,
+        "subscores": subscores,
+        "duration": float(
+            duration
+        ),
         "pitch_data": pitch_data,
+
+        # Optional diagnostics.
+        "analysis_meta": {
+            "engine": (
+                "librosa.pyin"
+                if LIBROSA_OK
+                else "fallback"
+            ),
+            "librosa_version": (
+                LIBROSA_VERSION
+            ),
+            "sample_rate": int(
+                sr
+            ),
+            "reliable_pitch_ratio": round(
+                reliable_pitch_ratio,
+                3,
+            ),
+            "active_audio_ratio": round(
+                active_ratio,
+                3,
+            ),
+        },
     }
 
 
-def _short_result():
+# ---------------------------------------------------------------------------
+# Short / invalid recording
+# ---------------------------------------------------------------------------
+
+def _short_result(
+    message=(
+        "Recording too short — "
+        "hold the note for at least 1 second."
+    )
+):
     return {
-        "score":     0,
-        "xp":        0,
-        "feedback":  [{"time": "", "message": "Recording too short — hold the note for at least 1–2 seconds."}],
+        "score": 0,
+        "xp": 0,
+        "feedback": [
+            {
+                "time": "",
+                "message": message,
+            }
+        ],
         "subscores": {},
-        "duration":  0.0,
-        "pitch_data": {"f0": [], "times": []},
+        "duration": 0.0,
+        "pitch_data": {
+            "f0": [],
+            "times": [],
+        },
     }
