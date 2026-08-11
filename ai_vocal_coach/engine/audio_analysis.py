@@ -51,28 +51,61 @@ def _load_audio(audio_bytes):
 # ── Feature extraction ────────────────────────────────────────────────────────
 
 def _pitch_track_fallback(y, sr):
-    """Autocorrelation-based pitch detection — no numba required."""
+    """YIN-inspired pitch detection — no numba required."""
     fmin, fmax = 65.0, 1050.0
-    min_period = max(1, int(sr / fmax))
+    min_period = max(2, int(sr / fmax))
     max_period = min(FRAME // 2, int(sr / fmin))
 
     f0_list, vf_list = [], []
     win = np.hanning(FRAME)
 
     for start in range(0, len(y) - FRAME + 1, HOP):
-        frame = y[start: start + FRAME] * win
-        corr = np.correlate(frame, frame, mode="full")[FRAME - 1:]
-
-        if corr[0] < 1e-10 or max_period <= min_period:
+        frame = y[start: start + FRAME]
+        frame = frame - frame.mean()           # zero-mean
+        energy = float(np.dot(frame, frame))
+        if energy < 1e-9:
             f0_list.append(np.nan)
             vf_list.append(False)
             continue
 
-        peak_idx = int(np.argmax(corr[min_period: max_period + 1])) + min_period
-        peak_val = corr[peak_idx]
+        frame_w = frame * win
 
-        if peak_val / (corr[0] + 1e-10) > 0.35:
-            f0_list.append(sr / peak_idx)
+        # Normalized autocorrelation
+        corr = np.correlate(frame_w, frame_w, mode="full")[FRAME - 1:]
+        corr_norm = corr / (corr[0] + 1e-10)
+
+        # YIN difference function d[tau] = 2*r[0] - 2*r[tau]
+        # Cumulative mean normalised difference for voiced/unvoiced decision
+        d = 2.0 * (corr_norm[0] - corr_norm[min_period: max_period + 1])
+        if len(d) == 0:
+            f0_list.append(np.nan)
+            vf_list.append(False)
+            continue
+
+        # Cumulative mean normalisation
+        cum = np.cumsum(d)
+        idx = np.arange(1, len(d) + 1)
+        cmnd = np.where(idx > 0, d * idx / (cum + 1e-10), 1.0)
+
+        # Find first dip below threshold
+        threshold = 0.18
+        dip_candidates = np.where(cmnd < threshold)[0]
+        if len(dip_candidates) > 0:
+            tau = int(dip_candidates[0]) + min_period
+        else:
+            tau = int(np.argmin(cmnd)) + min_period
+
+        # Parabolic interpolation for sub-sample accuracy
+        if 0 < tau < len(corr_norm) - 1:
+            a, b, c = corr_norm[tau - 1], corr_norm[tau], corr_norm[tau + 1]
+            denom = 2.0 * (2 * b - a - c)
+            refined = tau + (c - a) / (denom + 1e-10) if abs(denom) > 1e-6 else tau
+        else:
+            refined = tau
+
+        voiced = len(dip_candidates) > 0 or float(np.min(cmnd)) < 0.30
+        if voiced and refined > 0:
+            f0_list.append(sr / max(refined, 1.0))
             vf_list.append(True)
         else:
             f0_list.append(np.nan)
@@ -82,7 +115,15 @@ def _pitch_track_fallback(y, sr):
         n = len(y) // HOP + 1
         return np.full(n, np.nan), np.zeros(n, dtype=bool)
 
-    return np.array(f0_list, dtype=np.float64), np.array(vf_list, dtype=bool)
+    f0 = np.array(f0_list, dtype=np.float64)
+    vf = np.array(vf_list, dtype=bool)
+
+    # 3-point median smoothing on voiced runs to suppress octave errors
+    for i in range(1, len(f0) - 1):
+        if vf[i - 1] and vf[i] and vf[i + 1]:
+            f0[i] = float(np.median([f0[i - 1], f0[i], f0[i + 1]]))
+
+    return f0, vf
 
 
 def _pitch_track(y, sr):
