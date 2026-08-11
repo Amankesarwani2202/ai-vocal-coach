@@ -50,8 +50,43 @@ def _load_audio(audio_bytes):
 
 # ── Feature extraction ────────────────────────────────────────────────────────
 
+def _pitch_track_fallback(y, sr):
+    """Autocorrelation-based pitch detection — no numba required."""
+    fmin, fmax = 65.0, 1050.0
+    min_period = max(1, int(sr / fmax))
+    max_period = min(FRAME // 2, int(sr / fmin))
+
+    f0_list, vf_list = [], []
+    win = np.hanning(FRAME)
+
+    for start in range(0, len(y) - FRAME + 1, HOP):
+        frame = y[start: start + FRAME] * win
+        corr = np.correlate(frame, frame, mode="full")[FRAME - 1:]
+
+        if corr[0] < 1e-10 or max_period <= min_period:
+            f0_list.append(np.nan)
+            vf_list.append(False)
+            continue
+
+        peak_idx = int(np.argmax(corr[min_period: max_period + 1])) + min_period
+        peak_val = corr[peak_idx]
+
+        if peak_val / (corr[0] + 1e-10) > 0.35:
+            f0_list.append(sr / peak_idx)
+            vf_list.append(True)
+        else:
+            f0_list.append(np.nan)
+            vf_list.append(False)
+
+    if not f0_list:
+        n = len(y) // HOP + 1
+        return np.full(n, np.nan), np.zeros(n, dtype=bool)
+
+    return np.array(f0_list, dtype=np.float64), np.array(vf_list, dtype=bool)
+
+
 def _pitch_track(y, sr):
-    """Return (f0_hz, voiced_flag) at HOP intervals using pyin."""
+    """Return (f0_hz, voiced_flag) at HOP intervals using pyin, with fallback."""
     if LIBROSA_OK:
         try:
             f0, vf, _ = librosa.pyin(
@@ -65,8 +100,7 @@ def _pitch_track(y, sr):
             return f0, vf.astype(bool)
         except Exception:
             pass
-    n = len(y) // HOP + 1
-    return np.full(n, np.nan), np.zeros(n, dtype=bool)
+    return _pitch_track_fallback(y, sr)
 
 
 def _rms_track(y):
