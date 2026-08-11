@@ -796,7 +796,9 @@ def render_top_nav(current_page="home"):
                 s.id = 'vc-backdrop-style';
                 s.textContent =
                     '#vc-backdrop{display:none;position:fixed;top:0;left:0;right:0;bottom:0;' +
-                    'z-index:1000;background:rgba(0,0,0,0.45);}';
+                    'z-index:1000;background:rgba(0,0,0,0.45);pointer-events:none;}' +
+                    '#vc-backdrop.vc-backdrop-active{pointer-events:auto;}' +
+                    '@media (min-width:768px){#vc-backdrop{display:none !important;}}';
                 p.head.appendChild(s);
             }
 
@@ -829,9 +831,14 @@ def render_top_nav(current_page="home"):
                 var sb = getSidebar();
                 if (sb) sb.style.transform = 'translateX(-100%)';
             }
+            function isMobile() {
+                return w.innerWidth < 768;
+            }
             function syncBackdrop() {
                 setTimeout(function() {
-                    back.style.display = isOpen() ? 'block' : 'none';
+                    var show = isMobile() && isOpen();
+                    back.style.display = show ? 'block' : 'none';
+                    back.classList.toggle('vc-backdrop-active', show);
                 }, 120);
             }
 
