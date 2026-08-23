@@ -39,7 +39,7 @@ def inject_custom_css():
 
     css = f"""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap');
 
         :root {{
             --bg: {bg};
@@ -56,7 +56,7 @@ def inject_custom_css():
         html, body, .stApp {{
             background-color: {bg} !important;
             color: {text};
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
         }}
 
         [data-testid="stVerticalBlock"],
@@ -78,6 +78,8 @@ def inject_custom_css():
             color: {text};
             letter-spacing: -0.02em;
             margin-bottom: 0.25rem;
+            font-family: 'Fraunces', Georgia, serif;
+            letter-spacing: 0;
         }}
 
         h2 {{

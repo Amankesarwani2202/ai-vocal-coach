@@ -66,8 +66,17 @@ def add_score(exercise_id: str, score: int, xp_earned: int):
             "exercise": exercise_id,
             "score": score,
             "xp": xp_earned,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
         }
     )
+
+
+def clear_user_data():
+    """Clear progress and return the session to the new-user state."""
+    theme = st.session_state.get("theme", "light")
+    st.session_state.clear()
+    init_session_state()
+    st.session_state.theme = theme
 
 
 def update_voice_profile(profile_data: dict):

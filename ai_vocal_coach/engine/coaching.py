@@ -184,9 +184,12 @@ def format_timestamped_feedback(feedback_events):
 
     for event in feedback_events:
         time_seconds = event.get("time", 0)
-        minutes = int(time_seconds // 60)
-        seconds = int(time_seconds % 60)
-        time_str = f"{minutes:02d}:{seconds:02d}"
+        if isinstance(time_seconds, str) and ":" in time_seconds:
+            time_str = time_seconds
+        else:
+            minutes = int(float(time_seconds) // 60)
+            seconds = float(time_seconds) % 60
+            time_str = f"{minutes}:{seconds:04.1f}"
 
         message = event.get("message", "")
         formatted.append({"time": time_str, "message": message})

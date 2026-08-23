@@ -77,6 +77,20 @@ def _check_noise_level(audio_bytes):
         return False
 
 
+def _generated_exhalation_audio():
+    """Create a fallback 15-second breath reference when the WAV is absent."""
+    samples = np.random.default_rng(7).normal(0, 0.12, 15 * 16000)
+    samples = np.clip(samples, -1.0, 1.0)
+    audio = (samples * 32767).astype(np.int16)
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(16000)
+        wav_file.writeframes(audio.tobytes())
+    return buffer.getvalue()
+
+
 def render_introduction_stage(exercise_info):
     level = exercise_info.get("level", "")
     clean_title = exercise_info.get("title", "Exercise")
@@ -135,6 +149,7 @@ def render_introduction_stage(exercise_info):
 
 def render_recording_stage(exercise_id, breathing_type="support"):
     from components.breathing_guide import render_breathing_guide
+    from components.exercise_guides import render_exercise_guide
     from engine.audio_analysis import exercise_type_from_id, analyze_audio
 
     exercise_type = exercise_type_from_id(exercise_id)
@@ -159,26 +174,27 @@ def render_recording_stage(exercise_id, breathing_type="support"):
     if exercise_type in {"warm_up", "breath_support", "silent_breath"}:
         render_breathing_guide(exercise_type)
     else:
+        render_exercise_guide(exercise_type)
         guidance = {
             "range_finder": (
                 "Sing one comfortable note, then step upward and downward. "
                 "Stop at the highest and lowest notes you can sing comfortably."
             ),
             "smooth_onset": (
-                "Start the 'ah' gently, sustain it for 3-4 seconds, "
-                "and release without a hard attack."
+                "Sing five light 'la' or 'ma' notes on one pitch. "
+                "Start each note cleanly without a breathy or harsh attack."
             ),
             "legato": (
-                "Sing do-re-mi on 'ah' as one connected phrase. "
+                "Sing do-re-mi-re-do on 'oo' as one connected phrase. "
                 "Keep the airflow moving between notes."
             ),
             "scale": (
-                "Sing do-re-mi-fa-sol on 'ah'. Keep each note clear "
+                "Sing do-re-mi-fa-sol on 'oo'. Keep each note clear "
                 "while maintaining steady breath support."
             ),
             "staccato": (
-                "First sing short, separated notes. Then sing the same notes "
-                "smoothly connected, noticing the contrast."
+                "First sing do-do-do as short, separated notes. Then repeat "
+                "the pattern smoothly connected, noticing the contrast."
             ),
         }
         st.markdown("**Your focus**")
@@ -197,14 +213,19 @@ def render_recording_stage(exercise_id, breathing_type="support"):
     if _exh:
         _exh_path = Path(__file__).resolve().parent.parent / _exh
         if _exh_path.exists():
+            with open(_exh_path, "rb") as _f:
+                _exh_audio = _f.read()
+        else:
+            _exh_audio = _generated_exhalation_audio()
+
+        if _exh_audio:
             st.markdown(
                 '<div class="exemplar-block" style="margin-top:0.5rem">'
                 '<div class="exemplar-label">Exhalation reference</div>'
                 '</div>',
                 unsafe_allow_html=True,
             )
-            with open(_exh_path, "rb") as _f:
-                st.audio(_f.read(), format="audio/wav")
+            st.audio(_exh_audio, format="audio/wav")
 
     st.divider()
 
@@ -222,6 +243,7 @@ def render_recording_stage(exercise_id, breathing_type="support"):
                 st.rerun()
 
         _render_waveform(audio_bytes, st.session_state.get("exercise_analysis"))
+        _render_analysis_snapshot(st.session_state.get("exercise_analysis"))
 
         st.markdown("")
         col1, col2 = st.columns(2)
@@ -248,6 +270,17 @@ def render_recording_stage(exercise_id, breathing_type="support"):
             st.rerun()
 
     return None
+
+
+def _render_analysis_snapshot(analysis):
+    """Show the most useful measurements immediately after analysis."""
+    if not analysis or not analysis.get("subscores"):
+        return
+
+    st.markdown("**What the coach heard**")
+    columns = st.columns(min(3, len(analysis["subscores"])))
+    for column, (label, value) in zip(columns, list(analysis["subscores"].items())[:3]):
+        column.metric(label, f"{value}/100")
 
 
 def _render_waveform(audio_bytes, analysis=None):
@@ -338,7 +371,7 @@ def _recording_duration_seconds(audio_bytes):
 
 def _timestamp_to_seconds(ts):
     try:
-        parts = ts.split(":")
+        parts = str(ts).split(":")
         return int(parts[0]) * 60 + float(parts[1])
     except Exception:
         return 0.0
@@ -461,12 +494,18 @@ def render_results_stage(exercise_id, next_page):
 
     col_a, col_b = st.columns(2)
     with col_a:
-        if st.button("Try again", use_container_width=True, key="retry"):
+        if st.button("Try again", use_container_width=True, key=f"retry_{exercise_id}"):
             reset_exercise_flow()
             st.rerun()
     with col_b:
-        if st.button("Save and continue", use_container_width=True, key="save_score"):
+        is_final_exercise = next_page == "pages/1_Dashboard.py"
+        action_label = "Finish" if is_final_exercise else "Save and continue"
+        if st.button(action_label, use_container_width=True, key=f"save_score_{exercise_id}"):
             add_score(exercise_id, score, xp)
             st.session_state.exercise_analysis = None
+            st.toast("Progress saved")
             reset_exercise_flow()
             st.switch_page(next_page)
+
+    if st.button("View progress", use_container_width=True, key=f"progress_{exercise_id}"):
+        st.switch_page("pages/1_Dashboard.py")

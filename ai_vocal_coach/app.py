@@ -64,6 +64,7 @@ level_4 = [
     st.Page(str(pages_dir / "22_Exercise_4.2_Legato_Scales.py"), title="4.2 Stepwise Melodies"),
     st.Page(str(pages_dir / "23_Exercise_4.3_Phrase_Shaping.py"), title="4.3 Breath Phrasing"),
     st.Page(str(pages_dir / "24_Exercise_4.4_Melodic_Etude.py"), title="4.4 Melodic Etude"),
+    st.Page(str(pages_dir / "24b_Exercise_4.5_Simple_Vocalises.py"), title="4.5 Simple Vocalises"),
 ]
 
 # Level 5 — Rhythm, Pulse & Musical Timing
@@ -75,6 +76,40 @@ level_5 = [
     st.Page(str(pages_dir / "29_Exercise_5.5_Syncopation.py"), title="5.5 Syncopation"),
 ]
 
+# Level 6 — Resonance & Tone Colour
+level_6 = [
+    st.Page(str(pages_dir / "30_Exercise_6.1_Forward_Placement.py"), title="6.1 Forward Placement"),
+    st.Page(str(pages_dir / "31_Exercise_6.2_Resonance_Colours.py"), title="6.2 Resonance Colours"),
+    st.Page(str(pages_dir / "32_Exercise_6.3_Mixing_Registers.py"), title="6.3 Mixing Registers"),
+    st.Page(str(pages_dir / "33_Exercise_6.4_Crescendo_Decrescendo.py"), title="6.4 Crescendo-Decrescendo"),
+    st.Page(str(pages_dir / "34_Exercise_6.5_Messa_Di_Voce.py"), title="6.5 Messa di Voce"),
+]
+
+# Level 7 — Classical Technique
+level_7 = [
+    st.Page(str(pages_dir / "35_Exercise_7.1_Portamento.py"), title="7.1 Portamento"),
+    st.Page(str(pages_dir / "36_Exercise_7.2_Register_Turning_Points.py"), title="7.2 Register Turning Points"),
+    st.Page(str(pages_dir / "37_Exercise_7.3_Ornamentation.py"), title="7.3 Ornamentation"),
+    st.Page(str(pages_dir / "38_Exercise_7.4_Slow_Melismas.py"), title="7.4 Slow Melismas"),
+    st.Page(str(pages_dir / "39_Exercise_7.5_Fast_Runs.py"), title="7.5 Fast Runs"),
+]
+
+# Level 8 — Repertoire Starter Pieces
+level_8 = [
+    st.Page(str(pages_dir / "40_Exercise_8.1_Caro_Mio_Ben.py"), title="8.1 Caro mio ben"),
+    st.Page(str(pages_dir / "41_Exercise_8.2_Amarilli_Mia_Bella.py"), title="8.2 Amarilli mia bella"),
+    st.Page(str(pages_dir / "42_Exercise_8.3_Folk_Song_Settings.py"), title="8.3 Folk Song Settings"),
+    st.Page(str(pages_dir / "43_Exercise_8.4_Italian_Art_Song.py"), title="8.4 Italian Art Song"),
+]
+
+# Level 9 — Intermediate Repertoire
+level_9 = [
+    st.Page(str(pages_dir / "44_Exercise_9.1_Italian_Art_Songs.py"), title="9.1 Italian Art Songs"),
+    st.Page(str(pages_dir / "45_Exercise_9.2_German_Lieder.py"), title="9.2 German Lieder"),
+    st.Page(str(pages_dir / "46_Exercise_9.3_English_Art_Songs.py"), title="9.3 English Art Songs"),
+    st.Page(str(pages_dir / "47_Exercise_9.4_Raga_Vocalise.py"), title="9.4 Raga-Inspired Vocalise"),
+]
+
 nav = st.navigation(
     {
         "": [home],
@@ -84,6 +119,10 @@ nav = st.navigation(
         "Level 3 — Articulation": level_3,
         "Level 4 — Legato": level_4,
         "Level 5 — Rhythm": level_5,
+        "Level 6 — Resonance": level_6,
+        "Level 7 — Classical Technique": level_7,
+        "Level 8 — Repertoire I": level_8,
+        "Level 9 — Repertoire II": level_9,
     }
 )
 

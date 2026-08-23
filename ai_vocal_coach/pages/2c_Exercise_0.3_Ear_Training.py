@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from components.ui import inject_custom_css, render_top_nav, generate_tone
+from components.exercise_guides import render_exercise_guide
 from components.exercise_flow import (
     init_exercise_flow,
     reset_for_new_exercise,
@@ -247,6 +248,7 @@ def _result_stage(round_info):
 
 def _render_exercise_stage():
     _init_et_state()
+    render_exercise_guide("ear_training")
     rnd        = st.session_state.et_round
     inner      = st.session_state.et_inner
     round_info = _rounds()[rnd - 1]
@@ -349,6 +351,8 @@ def _render_summary_stage():
             _reset_et_state()
             reset_exercise_flow()
             st.switch_page(NEXT_PAGE)
+    if st.button("View progress", use_container_width=True, key="et_progress"):
+        st.switch_page("pages/1_Dashboard.py")
 
 
 # ─────────────────────────────────────────────

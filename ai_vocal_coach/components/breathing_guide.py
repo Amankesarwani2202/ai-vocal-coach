@@ -69,13 +69,19 @@ def render_breathing_guide(exercise_type="warm_up"):
 (function() {
   var cue = document.getElementById('cue');
   var timer = document.getElementById('timer');
-  var INHALE = 4, TOTAL = 19;
+  var INHALE = 4, HOLD = 2, TOTAL = 19, SILENT = __SILENT__;
   var start = Date.now();
   function tick() {
     var elapsed = ((Date.now() - start) / 1000) % TOTAL;
     if (elapsed < INHALE) {
       cue.textContent = 'Breathe in';
       timer.textContent = Math.ceil(INHALE - elapsed) + 's';
+    } else if (SILENT && elapsed < INHALE + HOLD) {
+      cue.textContent = 'Hold gently';
+      timer.textContent = Math.ceil(INHALE + HOLD - elapsed) + 's';
+    } else if (SILENT) {
+      cue.textContent = 'Exhale on ah';
+      timer.textContent = Math.ceil(TOTAL - elapsed) + 's';
     } else {
       cue.textContent = 'Release slowly';
       timer.textContent = Math.ceil(TOTAL - elapsed) + 's';
@@ -89,6 +95,8 @@ def render_breathing_guide(exercise_type="warm_up"):
 </html>
 """
 
+    html = html.replace("__SILENT__", str(exercise_type == "silent_breath").lower())
+
     components.html(html, height=340, scrolling=False)
 
     if exercise_type in ("warm_up", "breath_support"):
@@ -97,6 +105,12 @@ def render_breathing_guide(exercise_type="warm_up"):
 - Keep shoulders completely still
 - Exhale with a soft steady "sss" for 15 seconds
         """)
+    elif exercise_type == "silent_breath":
+        st.markdown("""
+- Inhale quietly through your nose for 4 seconds
+- Hold gently for 2 seconds without tightening your throat
+- Release slowly on an 'ah' for 4 seconds
+      """)
 
     with st.expander("Check your form"):
         st.markdown("""

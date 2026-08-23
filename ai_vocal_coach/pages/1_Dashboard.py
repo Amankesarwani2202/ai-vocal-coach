@@ -12,8 +12,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from components.ui import display_header, inject_custom_css, render_theme_toggle, render_top_nav
-from utils.state import init_session_state, get_voice_profile, is_level_0_complete, update_user_name
-from utils.pages_config import get_level_progress, get_pages_by_level
+from utils.state import clear_user_data, init_session_state, get_voice_profile, is_level_0_complete, update_user_name
+from utils.pages_config import get_level_progress, get_page_info, get_pages_by_level
 
 init_session_state()
 inject_custom_css()
@@ -71,7 +71,7 @@ else:
     col1, col2, col3 = st.columns(3)
     col1.metric("XP", f"{st.session_state.xp}")
     col2.metric("Exercises completed", len(completed))
-    total_exercises = 15
+    total_exercises = sum(item["total"] for item in progress.values())
     completion_pct = int((len(completed) / total_exercises * 100) if total_exercises > 0 else 0)
     col3.metric("Overall", f"{completion_pct}%", f"{len(completed)}/{total_exercises}")
 
@@ -95,26 +95,23 @@ else:
 
         st.markdown("<div class='section-label'>Level progression</div>", unsafe_allow_html=True)
 
-        prog_col1, prog_col2 = st.columns(2)
-
-        with prog_col1:
-            st.markdown(f"**Level 0 — Diagnostics** &nbsp; {progress[0]['completed']}/{progress[0]['total']}")
-            st.progress(progress[0]["percentage"] / 100)
-            st.markdown(f"**Level 1 — Fundamentals** &nbsp; {progress[1]['completed']}/{progress[1]['total']}")
-            st.progress(progress[1]["percentage"] / 100)
-
-        with prog_col2:
-            placement_level = voice_profile.get("placement_level", 1)
-            if placement_level >= 2:
-                st.markdown(f"**Level 2 — Pitch & Scales** &nbsp; {progress[2]['completed']}/{progress[2]['total']}")
-                st.progress(progress[2]["percentage"] / 100)
-            else:
-                st.markdown("**Level 2 — Pitch & Scales** &nbsp; Locked")
-                st.caption("Complete Level 1 to unlock.")
+        level_names = {
+            0: "Diagnostics", 1: "Fundamentals", 2: "Pitch & Scales",
+            3: "Articulation", 4: "Legato", 5: "Rhythm",
+            6: "Resonance", 7: "Classical Technique", 8: "Repertoire I",
+            9: "Repertoire II",
+        }
+        for row_start in range(0, 10, 2):
+            columns = st.columns(2)
+            for column, level in zip(columns, range(row_start, min(row_start + 2, 10))):
+                with column:
+                    item = progress[level]
+                    st.markdown(f"**Level {level} — {level_names[level]}** &nbsp; {item['completed']}/{item['total']}")
+                    st.progress(item["percentage"] / 100)
 
         st.divider()
 
-        col_l0, col_l1, col_l2 = st.columns(3)
+        level_columns = st.columns(3)
 
         def ex_list(num_str, name, completed_set):
             done = any(ex_id for ex_id in completed_set if num_str in str(ex_id))
@@ -122,41 +119,15 @@ else:
             style = "" if done else "color:var(--text-muted,#6B6560)"
             return f"<div style='padding:0.2rem 0;font-size:0.88rem;{style}'>{marker} {name}</div>"
 
-        with col_l0:
-            st.markdown("<div class='section-label'>Diagnostics</div>", unsafe_allow_html=True)
-            st.markdown(
-                ex_list("0.1", "Vocal Warm-Up", completed) +
-                ex_list("0.2", "Range Finder", completed) +
-                ex_list("0.3", "Ear Training", completed),
-                unsafe_allow_html=True,
-            )
-
-        with col_l1:
-            st.markdown("<div class='section-label'>Fundamentals</div>", unsafe_allow_html=True)
-            st.markdown(
-                ex_list("1.1", "Diaphragmatic Support", completed) +
-                ex_list("1.2", "Silent Breath", completed) +
-                ex_list("1.3", "Smooth Onset", completed) +
-                ex_list("1.4", "Legato", completed) +
-                ex_list("1.5", "Five-Note Scale", completed) +
-                ex_list("1.6", "Staccato vs Legato", completed),
-                unsafe_allow_html=True,
-            )
-
-        with col_l2:
-            st.markdown("<div class='section-label'>Pitch & Scales</div>", unsafe_allow_html=True)
-            locked_style = "" if placement_level >= 2 else "opacity:0.4"
-            st.markdown(f"<div style='{locked_style}'>", unsafe_allow_html=True)
-            st.markdown(
-                ex_list("2.1", "Major Scale Ascending", completed) +
-                ex_list("2.2", "Major Scale Descending", completed) +
-                ex_list("2.3", "Minor Scales", completed) +
-                ex_list("2.4", "Interval Training", completed) +
-                ex_list("2.5", "Arpeggios", completed) +
-                ex_list("2.6", "Pitch Stability", completed),
-                unsafe_allow_html=True,
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
+        for column, level in zip(level_columns, range(10)):
+            with column:
+                pages = get_pages_by_level(level)
+                st.markdown(f"<div class='section-label'>Level {level} · {level_names[level]}</div>", unsafe_allow_html=True)
+                listing = "".join(
+                    ex_list(key.split("_Exercise_")[-1].split("_", 1)[0], info["title"], completed)
+                    for key, info in sorted(pages.items(), key=lambda entry: entry[1].get("order", 0))
+                )
+                st.markdown(listing, unsafe_allow_html=True)
 
         st.divider()
 
@@ -166,6 +137,9 @@ else:
             st.markdown(f"**Continue Level 1** — you've completed {progress[1]['completed']} of {progress[1]['total']} exercises.")
         elif placement_level >= 2 and progress[2]["percentage"] < 100:
             st.markdown("**Level 2 is unlocked.** Work on your pitch and scales to keep improving.")
+        elif next((level for level in range(3, 10) if progress[level]["percentage"] < 100), None) is not None:
+            next_level = next(level for level in range(3, 10) if progress[level]["percentage"] < 100)
+            st.markdown(f"**Continue Level {next_level}** — keep building your technique and musicality.")
         else:
             st.markdown("All exercises complete. Keep practising to improve your scores.")
 
@@ -217,15 +191,31 @@ else:
     st.markdown("<div class='section-label'>Recent activity</div>", unsafe_allow_html=True)
 
     if st.session_state.history:
-        df = pd.DataFrame(st.session_state.history)
+        df = pd.DataFrame(st.session_state.history).copy()
+        df["exercise"] = df["exercise"].map(
+            lambda key: get_page_info(key).get(
+                "title",
+                str(key).split("_Exercise_")[-1].replace("_", " "),
+            )
+        )
+        visible_columns = [column for column in ["timestamp", "exercise", "score", "xp"] if column in df]
         st.dataframe(
-            df,
+            df[visible_columns],
             width="stretch",
             hide_index=True,
             column_config={
+                "exercise": st.column_config.TextColumn("Exercise", width="large"),
                 "score": st.column_config.NumberColumn(format="%.0f/100"),
                 "timestamp": st.column_config.TextColumn(width="medium"),
             },
         )
     else:
         st.caption("No sessions recorded yet. Complete an exercise to start tracking.")
+
+    st.divider()
+    with st.expander("Start as a new user"):
+        st.caption("This clears your name, scores, history, and vocal profile for this session.")
+        confirm_clear = st.checkbox("I understand this cannot be undone", key="confirm_clear_data")
+        if st.button("Clear data and restart", disabled=not confirm_clear, key="clear_user_data"):
+            clear_user_data()
+            st.rerun()

@@ -1877,7 +1877,77 @@ def _subscores(
             "Breath Support":  energy,
             "Consistency":     continuity,
         },
+
+        # Levels 6-9 use the same measurable fundamentals while their
+        # exercise-specific signals are surfaced in feedback below.
+        "forward_placement": {
+            "Resonance Focus": presence,
+            "Tone Quality": energy,
+            "Stability": ps,
+        },
+        "resonance_colours": {
+            "Tone Colour": energy,
+            "Resonance Focus": presence,
+            "Stability": ps,
+        },
+        "mixing_registers": {
+            "Register Connection": continuity,
+            "Pitch Stability": ps,
+            "Tone Focus": onset,
+        },
+        "dynamic_shaping": {
+            "Dynamic Control": energy,
+            "Pitch Stability": ps,
+            "Continuity": continuity,
+        },
+        "messa_di_voce": {
+            "Dynamic Control": energy,
+            "Sustain": continuity,
+            "Pitch Stability": ps,
+        },
+        "portamento": {
+            "Glide Control": continuity,
+            "Pitch Stability": ps,
+            "Tone Focus": onset,
+        },
+        "register_turning_points": {
+            "Register Connection": continuity,
+            "Pitch Stability": ps,
+            "Tone Quality": energy,
+        },
+        "ornamentation": {
+            "Agility": onset,
+            "Pitch Accuracy": ps,
+            "Consistency": continuity,
+        },
+        "slow_melismas": {
+            "Pitch Accuracy": ps,
+            "Melodic Connection": continuity,
+            "Tone Consistency": energy,
+        },
+        "fast_runs": {
+            "Agility": onset,
+            "Pitch Accuracy": ps,
+            "Coordination": continuity,
+        },
+        "vocalises": {
+            "Legato Line": continuity,
+            "Pitch Accuracy": ps,
+            "Breath Flow": energy,
+        },
     }
+
+    for repertoire_type in {
+        "repertoire_caro_mio_ben", "repertoire_amarilli",
+        "repertoire_folk_song", "repertoire_italian_song",
+        "repertoire_italian_complete", "repertoire_german_lieder",
+        "repertoire_english_song", "repertoire_raga_vocalise",
+    }:
+        table[repertoire_type] = {
+            "Pitch Stability": ps,
+            "Phrase Connection": continuity,
+            "Tone Quality": energy,
+        }
 
     return table.get(
         exercise_type,
@@ -1953,10 +2023,9 @@ def _ts(seconds):
         float(seconds),
     )
 
-    return (
-        f"{int(seconds // 60)}:"
-        f"{int(seconds % 60):02d}"
-    )
+    minutes = int(seconds // 60)
+    remaining = seconds % 60
+    return f"{minutes}:{remaining:04.1f}"
 
 
 def _range_notes(f0):
@@ -2355,6 +2424,16 @@ def _generate_feedback(
                     ),
                 }
             )
+        else:
+            feedback.append(
+                {
+                    "time": "0:00.0",
+                    "message": (
+                        "No sustainable range was detected — sing a clear "
+                        "ascending and descending scale"
+                    ),
+                }
+            )
 
     # ------------------------------------------------------------------
     # Warm-up specific feedback
@@ -2376,6 +2455,16 @@ def _generate_feedback(
                 {
                     "time": "0:00",
                     "message": "Good — you held the exhalation well",
+                }
+            )
+        else:
+            feedback.append(
+                {
+                    "time": _ts(max(0, duration - 1.0)),
+                    "message": (
+                        "You started the exhalation well — try to extend it "
+                        "toward 10–15 seconds"
+                    ),
                 }
             )
 
@@ -2446,6 +2535,47 @@ def _generate_feedback(
                 }
             )
 
+    advanced_guidance = {
+        "forward_placement": (
+            "Keep the tone bright and forward without tightening your throat"
+        ),
+        "resonance_colours": (
+            "Explore the colour change with your mouth shape, not extra pressure"
+        ),
+        "mixing_registers": (
+            "Let the resonance lighten as you rise so the register change stays connected"
+        ),
+        "dynamic_shaping": (
+            "Change volume gradually while keeping the pitch centred"
+        ),
+        "messa_di_voce": (
+            "Build and release the dynamic arc without pressing the tone"
+        ),
+        "portamento": (
+            "Glide directly between the notes and arrive cleanly on the target"
+        ),
+        "register_turning_points": (
+            "Release the jaw and let the register transition happen without a push"
+        ),
+        "ornamentation": (
+            "Keep the main note steady while making the grace note light and quick"
+        ),
+        "slow_melismas": (
+            "Keep one vowel and one breath stream through the whole melisma"
+        ),
+        "fast_runs": (
+            "Build speed only while every pitch remains clear and relaxed"
+        ),
+        "vocalises": (
+            "Shape the vocalise as one connected musical phrase"
+        ),
+    }
+    if exercise_type in advanced_guidance:
+        feedback.append({
+            "time": "0:00",
+            "message": advanced_guidance[exercise_type],
+        })
+
     # ------------------------------------------------------------------
     # Deduplicate
     # ------------------------------------------------------------------
@@ -2469,33 +2599,6 @@ def _generate_feedback(
         seen.add(key)
         cleaned.append(item)
 
-    # Prefer actionable feedback over repeated positive feedback.
-    actionable = [
-        item
-        for item in cleaned
-        if any(
-            word in item["message"].lower()
-            for word in [
-                "try",
-                "gap",
-                "uneven",
-                "drift",
-                "moving",
-                "hold",
-                "target",
-                "connected",
-            ]
-        )
-    ]
-
-    positive = [
-        item
-        for item in cleaned
-        if item not in actionable
-    ]
-
-    result = actionable + positive
-
     def feedback_time_seconds(item):
         time_value = item.get("time", 0)
         if isinstance(time_value, (int, float)):
@@ -2507,10 +2610,52 @@ def _generate_feedback(
         except (TypeError, ValueError):
             return 0.0
 
-    result.sort(key=feedback_time_seconds)
+    actionable_words = [
+        "try", "gap", "uneven", "drift", "moving", "hold",
+        "target", "connected", "no sustainable", "no clear",
+    ]
+    actionable = [
+        item for item in cleaned
+        if any(word in item["message"].lower() for word in actionable_words)
+    ]
+
+    neutral_messages = {
+        "warm_up": "Airflow looks steady in this second",
+        "range_finder": "Range tracking continues — keep the note clear",
+        "ear_training": "Listen for the centre of the target pitch",
+        "breath_support": "Keep the airflow even through this second",
+        "silent_breath": "Keep the breath quiet and controlled",
+        "smooth_onset": "The tone is settling — keep the onset gentle",
+        "legato": "Keep the notes connected through this second",
+        "scale": "Keep each scale step clear and supported",
+        "staccato": "Keep the articulation light and precise",
+    }
+    default_message = neutral_messages.get(
+        exercise_type,
+        "Keep the phrase supported and connected",
+    )
+
+    # Collapse all events into one feedback item per elapsed recording second.
+    # This keeps the timeline complete while retaining the strongest issue.
+    per_second = []
+    for second in range(max(1, int(np.ceil(duration)))):
+        candidates = [
+            item for item in cleaned
+            if second <= feedback_time_seconds(item) < second + 1
+        ]
+        chosen = next(
+            (item for item in candidates if item in actionable),
+            candidates[0] if candidates else None,
+        )
+        per_second.append({
+            "time": _ts(second),
+            "message": chosen["message"] if chosen else default_message,
+        })
+
+    result = per_second
 
     return result[
-        :MAX_FEEDBACK_ITEMS
+        :max(MAX_FEEDBACK_ITEMS, len(per_second))
     ]
 
 
@@ -2558,6 +2703,26 @@ _EXERCISE_TYPE_MAP = {
     "5.3": "rhythm_compound",
     "5.4": "clap_sing",
     "5.5": "syncopation",
+
+    "4.5": "vocalises",
+    "6.1": "forward_placement",
+    "6.2": "resonance_colours",
+    "6.3": "mixing_registers",
+    "6.4": "dynamic_shaping",
+    "6.5": "messa_di_voce",
+    "7.1": "portamento",
+    "7.2": "register_turning_points",
+    "7.3": "ornamentation",
+    "7.4": "slow_melismas",
+    "7.5": "fast_runs",
+    "8.1": "repertoire_caro_mio_ben",
+    "8.2": "repertoire_amarilli",
+    "8.3": "repertoire_folk_song",
+    "8.4": "repertoire_italian_song",
+    "9.1": "repertoire_italian_complete",
+    "9.2": "repertoire_german_lieder",
+    "9.3": "repertoire_english_song",
+    "9.4": "repertoire_raga_vocalise",
 }
 
 

@@ -34,7 +34,6 @@ PAGES_MANIFEST = {
             "Release a soft 'sss' sound for 15 seconds",
             "Try to keep your airflow steady and smooth",
         ],
-        "exemplar_asset": "assets/examples/0_1_warm_up.wav",
         "exhalation_asset": "assets/examples/0_1_exhalation.wav",
     },
     "2b_Exercise_0.2_Range_Finder": {
@@ -53,7 +52,6 @@ PAGES_MANIFEST = {
             "Continue until you reach your highest comfortable note",
             "Rest, then repeat going down to your lowest note",
         ],
-        "exemplar_asset": "assets/examples/0_2_range_finder.wav",
     },
     "2c_Exercise_0.3_Ear_Training": {
         "level": 0,
@@ -90,7 +88,6 @@ PAGES_MANIFEST = {
             "Exhale with a steady 'sss' sound for 15+ seconds",
             "Focus on smooth, consistent airflow",
         ],
-        "exemplar_asset": "assets/examples/1_1_diaphragmatic.wav",
     },
     "4_Exercise_1.2_Silent_Breath": {
         "level": 1,
@@ -106,10 +103,9 @@ PAGES_MANIFEST = {
             "Sit comfortably and relax your shoulders",
             "Inhale quietly through your nose for 4 seconds",
             "Hold the breath gently for 2 seconds",
-            "Exhale slowly and quietly through your nose for 4 seconds",
+            "Release slowly on an 'ah' for 4 seconds",
             "Repeat 5-10 times, building awareness of breath",
         ],
-        "exemplar_asset": "assets/examples/1_2_silent_breath.wav",
     },
     "5_Exercise_1.3_Smooth_Onset": {
         "level": 1,
@@ -128,7 +124,6 @@ PAGES_MANIFEST = {
             "Sustain for 3-4 seconds with steady airflow",
             "Release gently without tension",
         ],
-        "exemplar_asset": "assets/examples/1_3_smooth_onset.wav",
     },
     "6_Exercise_1.4_Legato": {
         "level": 1,
@@ -147,7 +142,6 @@ PAGES_MANIFEST = {
             "Avoid stopping or gasping between notes",
             "Maintain steady airflow throughout all three notes",
         ],
-        "exemplar_asset": "assets/examples/1_4_legato.wav",
     },
     "7_Exercise_1.5_Five_Note_Scale": {
         "level": 1,
@@ -166,7 +160,6 @@ PAGES_MANIFEST = {
             "Maintain consistent breath support throughout",
             "Use steady airflow for all five notes",
         ],
-        "exemplar_asset": "assets/examples/1_5_five_note_scale.wav",
     },
     "8_Exercise_1.6_Staccato_vs_Legato": {
         "level": 1,
@@ -185,7 +178,6 @@ PAGES_MANIFEST = {
             "Flow the airflow continuously between notes",
             "Feel the contrast between the two styles",
         ],
-        "exemplar_asset": "assets/examples/1_6_staccato_legato.wav",
     },
     # Level 2: Advanced
     "9_Exercise_2.1_Major_Scale_Ascending": {
@@ -439,7 +431,7 @@ PAGES_MANIFEST = {
         ],
         "exemplar_asset": "assets/examples/4_1_connecting_notes.wav",
     },
-    "22_Exercise_4.2_Stepwise_Melodies": {
+    "22_Exercise_4.2_Legato_Scales": {
         "level": 4,
         "category": "Legato",
         "title": "4.2 Stepwise Melodies",
@@ -458,7 +450,7 @@ PAGES_MANIFEST = {
         ],
         "exemplar_asset": "assets/examples/4_2_stepwise_melodies.wav",
     },
-    "23_Exercise_4.3_Breath_Phrasing": {
+    "23_Exercise_4.3_Phrase_Shaping": {
         "level": 4,
         "category": "Legato",
         "title": "4.3 Breath Phrasing",
@@ -496,6 +488,24 @@ PAGES_MANIFEST = {
         ],
         "exemplar_asset": "assets/examples/4_4_melodic_etude.wav",
     },
+    "24b_Exercise_4.5_Simple_Vocalises": {
+        "level": 4,
+        "category": "Legato",
+        "title": "4.5 Simple Vocalises",
+        "description": "Apply legato technique to short classical vocalises",
+        "order": 27,
+        "skills": ["Legato", "Breath Flow", "Phrase Shaping"],
+        "difficulty": "Advanced",
+        "duration_minutes": 15,
+        "prerequisites": ["4.4"],
+        "instructions": [
+            "Sing a short five-note vocalise on 'ah' or 'oo'",
+            "Keep the line connected from the first note to the last",
+            "Shape the phrase with a gentle rise and release",
+            "Take one planned breath at the phrase boundary",
+            "Keep pitch, vowel, and airflow consistent throughout",
+        ],
+    },
 
     # ── Level 5: Rhythm, Pulse & Musical Timing ────────────────────────────
     "25_Exercise_5.1_Singing_Metronome": {
@@ -517,7 +527,7 @@ PAGES_MANIFEST = {
         ],
         "exemplar_asset": "assets/examples/5_1_metronome.wav",
     },
-    "26_Exercise_5.2_Simple_Rhythms": {
+    "26_Exercise_5.2_Quarter_Note_Pulse": {
         "level": 5,
         "category": "Rhythm",
         "title": "5.2 Simple Rhythmic Patterns",
@@ -536,7 +546,7 @@ PAGES_MANIFEST = {
         ],
         "exemplar_asset": "assets/examples/5_2_simple_rhythms.wav",
     },
-    "27_Exercise_5.3_Compound_Time": {
+    "27_Exercise_5.3_Dotted_Rhythms": {
         "level": 5,
         "category": "Rhythm",
         "title": "5.3 Compound Time (6/8)",
@@ -555,7 +565,7 @@ PAGES_MANIFEST = {
         ],
         "exemplar_asset": "assets/examples/5_3_compound_time.wav",
     },
-    "28_Exercise_5.4_Clapping_Singing": {
+    "28_Exercise_5.4_Triplets": {
         "level": 5,
         "category": "Rhythm",
         "title": "5.4 Clapping & Singing Together",
@@ -593,6 +603,120 @@ PAGES_MANIFEST = {
         ],
         "exemplar_asset": "assets/examples/5_5_syncopation.wav",
     },
+
+    # ── Level 6: Resonance & Tone Colour ───────────────────────────────────
+    "30_Exercise_6.1_Forward_Placement": {
+        "level": 6, "category": "Resonance", "title": "6.1 Forward Placement Awareness",
+        "description": "Find a clear, forward vocal resonance", "order": 32,
+        "skills": ["Resonance", "Projection", "Tone Colour"], "difficulty": "Intermediate", "duration_minutes": 12,
+        "prerequisites": ["Level 5"], "instructions": ["Hum gently, then open to 'ah'", "Feel vibration toward the lips and cheekbones", "Keep the throat relaxed", "Sustain a bright, focused tone", "Repeat at three comfortable pitches"],
+    },
+    "31_Exercise_6.2_Resonance_Colours": {
+        "level": 6, "category": "Resonance", "title": "6.2 Resonance Colours",
+        "description": "Explore nasal ring, balanced resonance, and dark tone", "order": 33,
+        "skills": ["Resonance", "Tone Colour", "Awareness"], "difficulty": "Intermediate", "duration_minutes": 12,
+        "prerequisites": ["6.1"], "instructions": ["Sing one note with a light forward ring", "Repeat with a balanced open tone", "Repeat with a warmer, darker colour", "Keep the sound free rather than forced", "Notice how the resonance changes"],
+    },
+    "32_Exercise_6.3_Mixing_Registers": {
+        "level": 6, "category": "Resonance", "title": "6.3 Mixing Registers",
+        "description": "Blend chest and head resonance through the passaggio", "order": 34,
+        "skills": ["Register Blend", "Resonance", "Connection"], "difficulty": "Advanced", "duration_minutes": 15,
+        "prerequisites": ["6.2"], "instructions": ["Begin on a comfortable middle note", "Glide upward on 'oo'", "Let the tone lighten without breaking", "Return downward with the same connection", "Repeat gently without pushing"],
+    },
+    "33_Exercise_6.4_Crescendo_Decrescendo": {
+        "level": 6, "category": "Resonance", "title": "6.4 Crescendo-Decrescendo Control",
+        "description": "Shape volume gradually without losing pitch or tone", "order": 35,
+        "skills": ["Dynamics", "Tone Control", "Breath Support"], "difficulty": "Advanced", "duration_minutes": 12,
+        "prerequisites": ["6.3"], "instructions": ["Sustain one comfortable pitch", "Grow from soft to medium volume", "Reach a controlled peak", "Return gradually to soft", "Keep pitch and resonance stable"],
+    },
+    "34_Exercise_6.5_Messa_Di_Voce": {
+        "level": 6, "category": "Resonance", "title": "6.5 Messa di Voce",
+        "description": "Sustain a note while shaping a complete dynamic arc", "order": 36,
+        "skills": ["Dynamic Shaping", "Stability", "Breath Control"], "difficulty": "Advanced", "duration_minutes": 15,
+        "prerequisites": ["6.4"], "instructions": ["Start the note softly", "Increase volume smoothly", "Hold the centre of the dynamic arc", "Release back to soft", "Stop before the tone becomes pressed"],
+    },
+
+    # ── Level 7: Classical Technique ──────────────────────────────────────
+    "35_Exercise_7.1_Portamento": {
+        "level": 7, "category": "Classical Technique", "title": "7.1 Portamento Accuracy",
+        "description": "Connect wider pitches with a controlled vocal glide", "order": 37,
+        "skills": ["Portamento", "Pitch Connection", "Legato"], "difficulty": "Advanced", "duration_minutes": 15,
+        "prerequisites": ["Level 6"], "instructions": ["Sing two comfortable target notes", "Glide between them slowly and evenly", "Arrive clearly at the second pitch", "Avoid scooping below the target", "Repeat descending"],
+    },
+    "36_Exercise_7.2_Register_Turning_Points": {
+        "level": 7, "category": "Classical Technique", "title": "7.2 Register Turning Points",
+        "description": "Navigate register changes without a crack or squeeze", "order": 38,
+        "skills": ["Registers", "Release", "Connection"], "difficulty": "Advanced", "duration_minutes": 15,
+        "prerequisites": ["7.1"], "instructions": ["Choose a five-note pattern near your transition", "Sing upward softly", "Allow the resonance to adjust naturally", "Return without dropping the support", "Repeat with a slightly brighter vowel"],
+    },
+    "37_Exercise_7.3_Ornamentation": {
+        "level": 7, "category": "Classical Technique", "title": "7.3 Ornamentation Basics",
+        "description": "Add a simple grace note with clarity and control", "order": 39,
+        "skills": ["Grace Notes", "Agility", "Pitch Accuracy"], "difficulty": "Advanced", "duration_minutes": 15,
+        "prerequisites": ["7.2"], "instructions": ["Sing the main note cleanly", "Add one quick grace note before it", "Keep the main beat stable", "Do not rush the landing pitch", "Repeat in both directions"],
+    },
+    "38_Exercise_7.4_Slow_Melismas": {
+        "level": 7, "category": "Classical Technique", "title": "7.4 Slow Melismatic Lines",
+        "description": "Move through several pitches on one vowel with control", "order": 40,
+        "skills": ["Melisma", "Legato", "Breath Flow"], "difficulty": "Advanced", "duration_minutes": 18,
+        "prerequisites": ["7.3"], "instructions": ["Sing five notes on one vowel", "Keep the vowel stable through each pitch", "Connect every note without a break", "Keep the rhythm even", "Repeat slowly with a relaxed jaw"],
+    },
+    "39_Exercise_7.5_Fast_Runs": {
+        "level": 7, "category": "Classical Technique", "title": "7.5 Fast Runs",
+        "description": "Build accuracy and freedom in simple coloratura patterns", "order": 41,
+        "skills": ["Agility", "Pitch Accuracy", "Coordination"], "difficulty": "Advanced", "duration_minutes": 18,
+        "prerequisites": ["7.4"], "instructions": ["Start the pattern slowly", "Keep each pitch distinct", "Increase speed only while accurate", "Keep the jaw and tongue free", "Finish with a clear landing note"],
+    },
+
+    # ── Levels 8-9: Repertoire ─────────────────────────────────────────────
+    "40_Exercise_8.1_Caro_Mio_Ben": {
+        "level": 8, "category": "Repertoire I", "title": "8.1 Caro mio ben Phrases",
+        "description": "Apply technique to short Italian art-song phrases", "order": 42,
+        "skills": ["Repertoire", "Italian Diction", "Phrasing"], "difficulty": "Advanced", "duration_minutes": 20,
+        "prerequisites": ["Level 7"], "instructions": ["Speak the phrase clearly first", "Sing the short phrase on the text", "Keep the legato line connected", "Plan the breath at the phrase end", "Repeat with expressive but relaxed tone"],
+    },
+    "41_Exercise_8.2_Amarilli_Mia_Bella": {
+        "level": 8, "category": "Repertoire I", "title": "8.2 Amarilli mia bella Exercise",
+        "description": "Build phrase shape and diction in an Italian song excerpt", "order": 43,
+        "skills": ["Repertoire", "Diction", "Expression"], "difficulty": "Advanced", "duration_minutes": 20,
+        "prerequisites": ["8.1"], "instructions": ["Speak the text in rhythm", "Mark the important words", "Sing the excerpt with connected vowels", "Keep consonants light and clear", "Shape the phrase toward its peak"],
+    },
+    "42_Exercise_8.3_Folk_Song_Settings": {
+        "level": 8, "category": "Repertoire I", "title": "8.3 Folk Song Settings",
+        "description": "Carry classical technique into a simple folk melody", "order": 44,
+        "skills": ["Musicality", "Phrasing", "Tone"], "difficulty": "Intermediate", "duration_minutes": 15,
+        "prerequisites": ["8.2"], "instructions": ["Listen for the melody shape", "Sing the tune simply and clearly", "Keep the vowel consistent", "Use a natural expressive dynamic", "Take breaths only at musical commas"],
+    },
+    "43_Exercise_8.4_Italian_Art_Song": {
+        "level": 8, "category": "Repertoire I", "title": "8.4 Italian Art Song Segments",
+        "description": "Combine diction, breath, resonance, and legato in short segments", "order": 45,
+        "skills": ["Repertoire", "Legato", "Diction", "Expression"], "difficulty": "Advanced", "duration_minutes": 20,
+        "prerequisites": ["8.3"], "instructions": ["Speak the segment before singing", "Identify the phrase boundary", "Sing with clear Italian vowels", "Keep the line supported through the final word", "Repeat with a more intentional phrase shape"],
+    },
+    "44_Exercise_9.1_Italian_Art_Songs": {
+        "level": 9, "category": "Repertoire II", "title": "9.1 Complete Italian Art Songs",
+        "description": "Perform a complete Italian song with sustained technique", "order": 46,
+        "skills": ["Full Performance", "Italian Diction", "Stamina"], "difficulty": "Advanced", "duration_minutes": 30,
+        "prerequisites": ["Level 8"], "instructions": ["Review the text and translation", "Mark your planned breaths", "Sing the complete song", "Keep technique consistent across sections", "Review the recording and choose one focus"],
+    },
+    "45_Exercise_9.2_German_Lieder": {
+        "level": 9, "category": "Repertoire II", "title": "9.2 Simple German Lieder",
+        "description": "Explore clear German diction within a sustained vocal line", "order": 47,
+        "skills": ["German Diction", "Repertoire", "Phrasing"], "difficulty": "Advanced", "duration_minutes": 30,
+        "prerequisites": ["9.1"], "instructions": ["Speak the text with clear consonants", "Keep vowels tall and connected", "Sing each phrase with its natural stress", "Avoid tightening on final consonants", "Review diction and line together"],
+    },
+    "46_Exercise_9.3_English_Art_Songs": {
+        "level": 9, "category": "Repertoire II", "title": "9.3 Simple English Art Songs",
+        "description": "Balance understandable English text with classical legato", "order": 48,
+        "skills": ["English Diction", "Legato", "Expression"], "difficulty": "Advanced", "duration_minutes": 25,
+        "prerequisites": ["9.1"], "instructions": ["Speak the text naturally", "Keep stressed words supported", "Connect vowels between consonants", "Keep the melody above the speech", "Perform the complete excerpt"],
+    },
+    "47_Exercise_9.4_Raga_Vocalise": {
+        "level": 9, "category": "Repertoire II", "title": "9.4 Raga-Inspired Vocalise",
+        "description": "Explore expressive pitch movement in a cross-cultural vocalise", "order": 49,
+        "skills": ["Improvisation", "Pitch Control", "Expression"], "difficulty": "Advanced", "duration_minutes": 25,
+        "prerequisites": ["9.2", "9.3"], "instructions": ["Listen to the tonic reference", "Sustain the tonal centre", "Explore the suggested scale slowly", "Use controlled slides between notes", "End by resolving clearly to the tonic"],
+    },
 }
 
 
@@ -605,7 +729,7 @@ def get_pages_by_level(level):
     """Get all pages for a specific level."""
     return {
         k: v for k, v in PAGES_MANIFEST.items()
-        if v.get("level") == level
+        if v.get("level") == level and not v.get("is_dashboard")
     }
 
 
@@ -620,7 +744,7 @@ def get_pages_by_category(category):
 def get_level_progress(completed_exercises):
     """Calculate progress for each level."""
     progress = {}
-    for level in [0, 1, 2, 3, 4, 5]:
+    for level in range(10):
         pages = get_pages_by_level(level)
         completed = sum(
             1 for k in pages.keys()
@@ -703,7 +827,7 @@ def get_level_badge(level):
 def format_page_listing():
     """Format all pages for display."""
     pages_by_level = {}
-    for level in [0, 1, 2, 3, 4, 5]:
+    for level in range(10):
         pages = get_pages_by_level(level)
         pages_by_level[level] = sorted(
             pages.items(),

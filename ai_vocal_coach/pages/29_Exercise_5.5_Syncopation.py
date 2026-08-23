@@ -20,7 +20,7 @@ from utils.state import init_session_state, add_score
 from utils.pages_config import get_page_info
 
 EXERCISE_ID = "29_Exercise_5.5_Syncopation"
-NEXT_PAGE = "pages/1_Home.py"   # placeholder — Level 6 not yet built
+NEXT_PAGE = "pages/30_Exercise_6.1_Forward_Placement.py"
 BPM = 84
 BARS = 4
 BEATS_PER_BAR = 4
@@ -118,6 +118,8 @@ def _result_phase():
             _reset_state()
             reset_exercise_flow()
             st.switch_page(NEXT_PAGE)
+    if st.button("View progress", use_container_width=True, key="m55_progress"):
+        st.switch_page("pages/1_Dashboard.py")
 
 
 def _render_exercise_stage():

@@ -119,6 +119,8 @@ def _result_phase():
             _reset_state()
             reset_exercise_flow()
             st.switch_page(NEXT_PAGE)
+    if st.button("View progress", use_container_width=True, key="m52_progress"):
+        st.switch_page("pages/1_Dashboard.py")
 
 
 def _render_exercise_stage():

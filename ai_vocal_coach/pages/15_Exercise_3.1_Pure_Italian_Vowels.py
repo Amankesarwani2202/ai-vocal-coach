@@ -301,6 +301,8 @@ def _render_summary_stage():
             _reset_state()
             reset_exercise_flow()
             st.switch_page(NEXT_PAGE)
+    if st.button("View progress", use_container_width=True, key="vow_progress"):
+        st.switch_page("pages/1_Dashboard.py")
 
 
 # ── Page entry point ──────────────────────────────────
