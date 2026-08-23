@@ -1400,6 +1400,166 @@ def _onset_smoothness(y, sr):
 
 
 # ---------------------------------------------------------------------------
+# Spectral helpers (Level 3+)
+# ---------------------------------------------------------------------------
+
+def _spectral_centroid_track(y, sr):
+    if LIBROSA_OK:
+        try:
+            sc = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=HOP, n_fft=FRAME)[0]
+            return np.asarray(sc, dtype=np.float64)
+        except Exception:
+            pass
+    n = max(1, int(np.ceil(len(y) / HOP)))
+    out = np.zeros(n, dtype=np.float64)
+    freqs = np.fft.rfftfreq(FRAME, d=1.0 / sr)
+    win = np.hanning(FRAME)
+    for i in range(n):
+        s, e = i * HOP, min(i * HOP + FRAME, len(y))
+        frame = y[s:e]
+        if len(frame) < FRAME:
+            frame = np.pad(frame, (0, FRAME - len(frame)))
+        mag = np.abs(np.fft.rfft(frame * win))
+        total = float(np.sum(mag))
+        if total > 1e-10:
+            out[i] = float(np.dot(freqs, mag) / total)
+    return out
+
+
+def _spectral_flatness_track(y):
+    if LIBROSA_OK:
+        try:
+            sf = librosa.feature.spectral_flatness(y=y, hop_length=HOP, n_fft=FRAME)[0]
+            return np.asarray(sf, dtype=np.float64)
+        except Exception:
+            pass
+    n = max(1, int(np.ceil(len(y) / HOP)))
+    out = np.zeros(n, dtype=np.float64)
+    win = np.hanning(FRAME)
+    for i in range(n):
+        s, e = i * HOP, min(i * HOP + FRAME, len(y))
+        frame = y[s:e]
+        if len(frame) < FRAME:
+            frame = np.pad(frame, (0, FRAME - len(frame)))
+        mag = np.abs(np.fft.rfft(frame * win)) + 1e-10
+        geo = float(np.exp(np.mean(np.log(mag))))
+        arith = float(np.mean(mag))
+        out[i] = geo / (arith + 1e-10)
+    return out
+
+
+def _vowel_consistency_score(y, sr, rms):
+    centroid = _spectral_centroid_track(y, sr)
+    _, active = _energy_gate(rms)
+    n = min(len(centroid), len(active))
+    ac = centroid[:n][active[:n]]
+    ac = ac[np.isfinite(ac) & (ac > 0)]
+    if len(ac) < 5:
+        return 60
+    med = float(np.median(ac))
+    if med < 1.0:
+        return 60
+    q25 = float(np.percentile(ac, 25))
+    q75 = float(np.percentile(ac, 75))
+    cv = (q75 - q25) / (2.0 * med + 1e-9)
+    score = float(np.interp(cv, [0.02, 0.06, 0.12, 0.22, 0.35, 0.50],
+                                [98,   94,   87,   74,   58,   35]))
+    return int(np.clip(score, 0, 100))
+
+
+def _tension_score(y, sr, rms, voiced_flag):
+    flatness = _spectral_flatness_track(y)
+    _, active = _energy_gate(rms)
+    n = min(len(flatness), len(active))
+    af = flatness[:n][active[:n]]
+    af = af[np.isfinite(af)]
+    if len(af) < 5:
+        return 65
+    flat_score = float(np.interp(
+        float(np.median(af)),
+        [0.01, 0.04, 0.08, 0.15, 0.25, 0.40],
+        [97,   93,   85,   70,   50,   30],
+    ))
+    energy_score = float(_vocal_energy_score(rms, active))
+    return int(np.clip(0.60 * flat_score + 0.40 * energy_score, 0, 100))
+
+
+def _consonant_clarity_score(y, sr):
+    if not LIBROSA_OK:
+        return 70
+    try:
+        rms = _rms_track(y)
+        onset_frames = librosa.onset.onset_detect(
+            y=y, sr=sr, hop_length=HOP, backtrack=False)
+        if len(onset_frames) == 0:
+            return 55
+        scores = []
+        for frame in onset_frames:
+            f = int(frame)
+            before = rms[max(0, f - 5):f]
+            after  = rms[f:min(len(rms), f + 5)]
+            if len(after) == 0:
+                continue
+            pre  = float(np.median(before)) if len(before) else 0.0
+            post = float(np.median(after))
+            if post <= 1e-7:
+                continue
+            rise = float(np.clip((post - pre) / post, 0.0, 1.0))
+            scores.append(float(np.interp(
+                rise,
+                [0.05, 0.20, 0.40, 0.65, 0.90, 1.00],
+                [40,   65,   85,   92,   78,   60],
+            )))
+        if not scores:
+            return 65
+        return int(np.clip(float(np.median(scores)), 0, 100))
+    except Exception:
+        return 65
+
+
+def _legato_smoothness_score(f0, voiced_flag, rms, sr):
+    cont = _continuity(voiced_flag, rms, sr)
+    voiced = f0[np.isfinite(f0) & (f0 >= MIN_F0)]
+    if len(voiced) >= 4:
+        cents = 1200.0 * np.log2(
+            np.clip(voiced[1:] / (voiced[:-1] + 1e-9), 0.5, 2.0))
+        smooth = int(np.clip(100 - float(np.mean(np.abs(cents) > 200)) * 300, 20, 100))
+    else:
+        smooth = 60
+    _, active = _energy_gate(rms)
+    energy = _vocal_energy_score(rms, active)
+    return int(np.clip(0.50 * cont + 0.30 * smooth + 0.20 * energy, 0, 100))
+
+
+def _breath_phrasing_score(rms, voiced_flag, sr, duration):
+    gaps = _gap_mask(rms, voiced_flag, sr)
+    if not np.any(gaps):
+        return 88, None, "no_breath"
+    longest_run = 0
+    gap_start_best = 0
+    i = 0
+    while i < len(gaps):
+        if gaps[i]:
+            s = i
+            while i < len(gaps) and gaps[i]:
+                i += 1
+            run = i - s
+            if run > longest_run:
+                longest_run = run
+                gap_start_best = s
+        else:
+            i += 1
+    breath_time = float(gap_start_best * HOP / max(sr, 1))
+    pct = breath_time / max(duration, 1.0)
+    if pct < 0.15 or pct > 0.85:
+        return 88, breath_time, "phrase_end"
+    elif pct < 0.30 or pct > 0.70:
+        return 72, breath_time, "near_phrase_end"
+    else:
+        return 45, breath_time, "mid_phrase"
+
+
+# ---------------------------------------------------------------------------
 # General metrics
 # ---------------------------------------------------------------------------
 
@@ -1482,6 +1642,24 @@ _WEIGHTS = {
     "intervals":        [0.60, 0.20, 0.20],
     "arpeggios":        [0.55, 0.20, 0.25],
     "pitch_stability":  [0.65, 0.20, 0.15],
+    # Level 3 — Articulation
+    "vowel_sustain":      [0.30, 0.40, 0.30],
+    "vowel_ascending":    [0.35, 0.30, 0.35],
+    "vowel_modification": [0.25, 0.45, 0.30],
+    "consonant_clarity":  [0.50, 0.25, 0.25],
+    "tongue_tension":     [0.30, 0.40, 0.30],
+    "diction_challenge":  [0.35, 0.35, 0.30],
+    # Level 4 — Legato & Musical Line
+    "legato_notes":       [0.25, 0.50, 0.25],
+    "legato_melody":      [0.25, 0.50, 0.25],
+    "breath_phrasing":    [0.20, 0.45, 0.35],
+    "melodic_etude":      [0.30, 0.40, 0.30],
+    # Level 5 — Rhythm
+    "metronome_singing":  [0.60, 0.20, 0.20],
+    "rhythm_quarters":    [0.65, 0.20, 0.15],
+    "rhythm_compound":    [0.65, 0.20, 0.15],
+    "clap_sing":          [0.60, 0.20, 0.20],
+    "syncopation":        [0.65, 0.20, 0.15],
 }
 
 
@@ -1615,11 +1793,89 @@ def _subscores(
 
         "pitch_stability": {
             "Pitch Stability": ps,
-            "Vibrato Control": max(
-                0,
-                ps - 5,
-            ),
+            "Vibrato Control": max(0, ps - 5),
             "Sustain": continuity,
+        },
+
+        # Level 3 — Articulation
+        "vowel_sustain": {
+            "Vowel Consistency": _vowel_consistency_score(y, sr, rms),
+            "Tone Quality":      _tension_score(y, sr, rms, voiced_flag),
+            "Pitch Stability":   ps,
+        },
+        "vowel_ascending": {
+            "Pitch Accuracy":    ps,
+            "Vowel Consistency": _vowel_consistency_score(y, sr, rms),
+            "Continuity":        continuity,
+        },
+        "vowel_modification": {
+            "Pitch Accuracy":    ps,
+            "Tone Focus":        _tension_score(y, sr, rms, voiced_flag),
+            "Continuity":        continuity,
+        },
+        "consonant_clarity": {
+            "Onset Clarity":     _consonant_clarity_score(y, sr),
+            "Pitch Accuracy":    ps,
+            "Consistency":       energy,
+        },
+        "tongue_tension": {
+            "Relaxation Score":  _tension_score(y, sr, rms, voiced_flag),
+            "Tone Quality":      energy,
+            "Continuity":        continuity,
+        },
+        "diction_challenge": {
+            "Articulation":      _consonant_clarity_score(y, sr),
+            "Pitch Accuracy":    ps,
+            "Continuity":        continuity,
+        },
+
+        # Level 4 — Legato & Musical Line
+        "legato_notes": {
+            "Continuity":        continuity,
+            "Phrase Smoothness": _legato_smoothness_score(f0, voiced_flag, rms, sr),
+            "Onset Quality":     onset,
+        },
+        "legato_melody": {
+            "Continuity":        continuity,
+            "Phrase Smoothness": _legato_smoothness_score(f0, voiced_flag, rms, sr),
+            "Pitch Accuracy":    ps,
+        },
+        "breath_phrasing": {
+            "Pitch Accuracy":    ps,
+            "Phrase Smoothness": _legato_smoothness_score(f0, voiced_flag, rms, sr),
+            "Breath Placement":  _breath_phrasing_score(rms, voiced_flag, sr, 8.0)[0],
+        },
+        "melodic_etude": {
+            "Pitch Accuracy":    ps,
+            "Phrase Smoothness": _legato_smoothness_score(f0, voiced_flag, rms, sr),
+            "Continuity":        continuity,
+        },
+
+        # Level 5 — Rhythm (rhythm exercises use analyze_rhythm_timing; these are fallbacks)
+        "metronome_singing": {
+            "Pitch Stability": ps,
+            "Breath Support":  energy,
+            "Consistency":     continuity,
+        },
+        "rhythm_quarters": {
+            "Pitch Stability": ps,
+            "Breath Support":  energy,
+            "Consistency":     continuity,
+        },
+        "rhythm_compound": {
+            "Pitch Stability": ps,
+            "Breath Support":  energy,
+            "Consistency":     continuity,
+        },
+        "clap_sing": {
+            "Pitch Stability": ps,
+            "Breath Support":  energy,
+            "Consistency":     continuity,
+        },
+        "syncopation": {
+            "Pitch Stability": ps,
+            "Breath Support":  energy,
+            "Consistency":     continuity,
         },
     }
 
@@ -2101,6 +2357,72 @@ def _generate_feedback(
             )
 
     # ------------------------------------------------------------------
+    # Warm-up specific feedback
+    # ------------------------------------------------------------------
+
+    if exercise_type == "warm_up":
+        if duration < 6.0:
+            feedback.append(
+                {
+                    "time": "0:00",
+                    "message": (
+                        "Hold the exhalation for longer "
+                        "— aim for 10–15 seconds"
+                    ),
+                }
+            )
+        elif duration >= 10.0:
+            feedback.append(
+                {
+                    "time": "0:00",
+                    "message": "Good — you held the exhalation well",
+                }
+            )
+
+        _, _wu_active = _energy_gate(rms)
+        _wu_rms = rms[
+            _wu_active
+            & np.isfinite(rms)
+            & (rms > 1e-7)
+        ]
+
+        if len(_wu_rms) >= 8:
+            _q25 = float(np.percentile(_wu_rms, 25))
+            _q75 = float(np.percentile(_wu_rms, 75))
+            _med  = float(np.median(_wu_rms))
+
+            if _med > 1e-8:
+                _cv = (_q75 - _q25) / (2.0 * _med + 1e-9)
+
+                if _cv < 0.12 and not any(
+                    "steady" in item["message"].lower()
+                    or "smooth" in item["message"].lower()
+                    for item in feedback
+                ):
+                    feedback.append(
+                        {
+                            "time": "0:00",
+                            "message": (
+                                "Very even airflow "
+                                "— your breath support is strong"
+                            ),
+                        }
+                    )
+                elif _cv > 0.40 and not any(
+                    "uneven" in item["message"].lower()
+                    for item in feedback
+                ):
+                    feedback.append(
+                        {
+                            "time": "0:00",
+                            "message": (
+                                "Airflow fluctuates — try to release "
+                                "air at a constant, gentle rate"
+                            ),
+                        }
+                    )
+
+    # ------------------------------------------------------------------
     # Exercise-specific guidance
     # ------------------------------------------------------------------
 
@@ -2205,6 +2527,27 @@ _EXERCISE_TYPE_MAP = {
     "2.4": "intervals",
     "2.5": "arpeggios",
     "2.6": "pitch_stability",
+
+    # Level 3 — Articulation
+    "3.1": "vowel_sustain",
+    "3.2": "vowel_ascending",
+    "3.3": "vowel_modification",
+    "3.4": "consonant_clarity",
+    "3.5": "tongue_tension",
+    "3.6": "diction_challenge",
+
+    # Level 4 — Legato & Musical Line
+    "4.1": "legato_notes",
+    "4.2": "legato_melody",
+    "4.3": "breath_phrasing",
+    "4.4": "melodic_etude",
+
+    # Level 5 — Rhythm
+    "5.1": "metronome_singing",
+    "5.2": "rhythm_quarters",
+    "5.3": "rhythm_compound",
+    "5.4": "clap_sing",
+    "5.5": "syncopation",
 }
 
 
@@ -2229,6 +2572,11 @@ def exercise_type_from_id(exercise_id):
     for key, exercise_type in _EXERCISE_TYPE_MAP.items():
 
         if value.startswith(key):
+            return exercise_type
+
+    # Handle page file IDs like "15_Exercise_3.1_Pure_Italian_Vowels"
+    for key, exercise_type in _EXERCISE_TYPE_MAP.items():
+        if key in value:
             return exercise_type
 
     return "warm_up"
@@ -2504,6 +2852,102 @@ def analyze_audio(
 # Short / invalid recording
 # ---------------------------------------------------------------------------
 
+def analyze_pitch_match(audio_bytes, reference_hz):
+    """
+    Compare recorded audio against a reference pitch.
+
+    Parameters
+    ----------
+    audio_bytes : bytes
+        Recorded audio (WAV or any format librosa can load).
+    reference_hz : float
+        The reference frequency the user was asked to match.
+
+    Returns
+    -------
+    dict with keys:
+        cents_deviation  float | None   positive = sharp, negative = flat
+        abs_cents        float | None
+        quality          str  "excellent" | "good" | "fair" | "off" | "miss"
+                              | "no_pitch" | "too_short" | "no_audio"
+        sung_hz          float | None
+        score            int  0 – 100
+    """
+
+    _empty = {
+        "cents_deviation": None,
+        "abs_cents": None,
+        "quality": "no_audio",
+        "sung_hz": None,
+        "score": 0,
+    }
+
+    if not audio_bytes or not (50.0 <= reference_hz <= 2000.0):
+        return _empty
+
+    y, sr = _load_audio(audio_bytes)
+
+    if y is None or sr is None or sr <= 0:
+        return _empty
+
+    duration = len(y) / float(sr)
+
+    if duration < MIN_RECORDING_SECONDS:
+        return {**_empty, "quality": "too_short"}
+
+    y = y - np.mean(y)
+    y = np.clip(y, -1.0, 1.0)
+
+    rms = _rms_track(y)
+    f0, voiced_flag = _pitch_track(y, sr, rms)
+
+    voiced = f0[
+        np.isfinite(f0)
+        & (f0 >= MIN_F0)
+        & (f0 <= MAX_F0)
+    ]
+
+    if len(voiced) < MIN_VOICED_FRAMES:
+        return {**_empty, "quality": "no_pitch"}
+
+    sung_hz = float(np.median(voiced))
+
+    # Allow ±1 octave matching — singer may naturally match in a different
+    # octave from the reference if the reference is outside their range.
+    candidates = [sung_hz, sung_hz * 2.0, sung_hz * 0.5]
+    best_hz = min(
+        candidates,
+        key=lambda hz: abs(1200.0 * np.log2(hz / reference_hz)),
+    )
+
+    cents_dev = float(1200.0 * np.log2(best_hz / reference_hz))
+    abs_cents = abs(cents_dev)
+
+    if abs_cents <= 15:
+        quality = "excellent"
+        score   = int(np.interp(abs_cents, [0.0,  15.0], [100, 88]))
+    elif abs_cents <= 30:
+        quality = "good"
+        score   = int(np.interp(abs_cents, [15.0, 30.0], [88,  74]))
+    elif abs_cents <= 50:
+        quality = "fair"
+        score   = int(np.interp(abs_cents, [30.0, 50.0], [74,  55]))
+    elif abs_cents <= 100:
+        quality = "off"
+        score   = int(np.interp(abs_cents, [50.0, 100.0], [55, 28]))
+    else:
+        quality = "miss"
+        score   = max(0, int(np.interp(abs_cents, [100.0, 200.0], [28, 0])))
+
+    return {
+        "cents_deviation": round(float(cents_dev), 1),
+        "abs_cents":       round(float(abs_cents), 1),
+        "quality":         quality,
+        "sung_hz":         round(float(sung_hz),   1),
+        "score":           int(np.clip(score, 0, 100)),
+    }
+
+
 def _short_result(
     message=(
         "Recording too short — "
@@ -2524,5 +2968,151 @@ def _short_result(
         "pitch_data": {
             "f0": [],
             "times": [],
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Level 5 — Rhythm helpers
+# ---------------------------------------------------------------------------
+
+def generate_click_track(bpm=80, bars=4, beats_per_bar=4, sr=16000):
+    """Generate a metronome click track as WAV bytes."""
+    beat_interval = 60.0 / max(bpm, 20)
+    total_samples = int(sr * bars * beats_per_bar * beat_interval) + sr
+    audio = np.zeros(total_samples, dtype=np.float32)
+    click_samples = int(sr * 0.04)
+    for bar in range(bars):
+        for beat in range(beats_per_bar):
+            start = int((bar * beats_per_bar + beat) * beat_interval * sr)
+            freq = 1000.0 if beat == 0 else 750.0
+            tc = np.linspace(0, 0.04, click_samples, endpoint=False)
+            click = (np.sin(2 * np.pi * freq * tc) * np.exp(-tc * 50) * 0.6).astype(np.float32)
+            end = min(start + click_samples, total_samples)
+            audio[start:end] += click[:end - start]
+    audio = np.clip(audio, -1.0, 1.0)
+    buf = io.BytesIO()
+    with _wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        wf.writeframes(
+            np.clip(audio * 32767, -32767, 32767).astype(np.int16).tobytes()
+        )
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def analyze_rhythm_timing(audio_bytes, bpm=80, beats_per_bar=4, total_bars=4):
+    """
+    Analyse vocal onset timing against a metronome beat grid.
+
+    Returns standard shape plus timing_data dict.
+    """
+    def _e(msg):
+        return {
+            "score": 0, "xp": 0,
+            "feedback": [{"time": "0:00", "message": msg}],
+            "subscores": {"Timing Accuracy": 0, "Note Presence": 0, "Consistency": 0},
+            "duration": 0.0,
+            "pitch_data": {"f0": [], "times": []},
+            "timing_data": {"onsets_sec": [], "beat_positions": [],
+                            "deviations_ms": [], "avg_deviation_ms": 0.0},
+        }
+
+    if not audio_bytes:
+        return _e("No recording received.")
+
+    y, sr = _load_audio(audio_bytes)
+    if y is None:
+        return _e("Could not load audio.")
+
+    duration = len(y) / float(sr)
+    if duration < MIN_RECORDING_SECONDS:
+        return _e("Recording too short — sing for at least 2 seconds.")
+
+    y = y - np.mean(y)
+    y = np.clip(y, -1.0, 1.0)
+
+    rms = _rms_track(y)
+    f0, voiced_flag = _pitch_track(y, sr, rms)
+
+    presence = float(np.mean(voiced_flag)) if len(voiced_flag) > 0 else 0.0
+    note_presence = int(np.clip(presence * 200, 0, 100))
+
+    if LIBROSA_OK:
+        try:
+            onsets = librosa.onset.onset_detect(
+                y=y, sr=sr, hop_length=HOP, backtrack=True, units="time")
+        except Exception:
+            onsets = np.array([])
+    else:
+        onsets = np.array([])
+
+    beat_interval = 60.0 / max(bpm, 20)
+    beat_positions = np.array([i * beat_interval
+                                for i in range(int(total_bars * beats_per_bar))])
+
+    deviations_ms = []
+    if len(onsets) > 0 and len(beat_positions) > 0:
+        for t in onsets:
+            nearest = beat_positions[np.argmin(np.abs(beat_positions - t))]
+            deviations_ms.append(abs(float(t) - float(nearest)) * 1000.0)
+
+    if deviations_ms:
+        avg_dev = float(np.mean(deviations_ms))
+        std_dev = float(np.std(deviations_ms))
+        timing_score  = int(np.interp(avg_dev,
+            [0, 30, 60, 100, 200, 400], [100, 92, 80, 65, 40, 20]))
+        consist_score = int(np.interp(std_dev,
+            [0, 20, 50, 100, 200],       [100, 92, 78, 55, 30]))
+    else:
+        avg_dev = 0.0
+        timing_score = consist_score = 50
+
+    overall = int(np.clip(
+        0.60 * timing_score + 0.20 * note_presence + 0.20 * consist_score, 0, 100))
+
+    feedback = []
+    if avg_dev < 30:
+        feedback.append({"time": "0:00", "message": "Excellent timing — right on the beat"})
+    elif avg_dev < 60:
+        feedback.append({"time": "0:00", "message": "Good timing — small deviations, keep tightening it"})
+    elif avg_dev < 100:
+        feedback.append({"time": "0:00",
+                         "message": f"Timing close — about {avg_dev:.0f} ms off; aim for under 60 ms"})
+    else:
+        feedback.append({"time": "0:00",
+                         "message": f"Timing needs work — about {avg_dev:.0f} ms off; internalize the beat first"})
+    if note_presence < 40:
+        feedback.append({"time": "0:00",
+                         "message": "Pitch not clearly detected — sing a clear, sustained tone"})
+    suggested_bpm = max(60, bpm - 10) if overall < 70 else bpm
+    feedback.append({"time": "0:00",
+                     "message": f"Suggested practice tempo: {suggested_bpm} BPM"})
+
+    n = min(len(f0), len(voiced_flag))
+    step = max(1, n // 500)
+    times = _frames_to_time(n, sr)
+
+    return {
+        "score": overall,
+        "xp":    _xp(overall),
+        "feedback": feedback,
+        "subscores": {
+            "Timing Accuracy": timing_score,
+            "Note Presence":   note_presence,
+            "Consistency":     consist_score,
+        },
+        "duration":   float(duration),
+        "pitch_data": {
+            "f0":    [float(v) if np.isfinite(v) else None for v in f0[:n:step]],
+            "times": [float(v) for v in times[:n:step]],
+        },
+        "timing_data": {
+            "onsets_sec":       [float(o) for o in onsets],
+            "beat_positions":   [float(b) for b in beat_positions],
+            "deviations_ms":    deviations_ms,
+            "avg_deviation_ms": round(avg_dev, 1),
         },
     }

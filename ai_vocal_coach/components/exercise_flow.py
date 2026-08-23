@@ -156,7 +156,24 @@ def render_recording_stage(exercise_id, breathing_type="support"):
                 st.rerun()
         return None
 
-    render_breathing_guide(breathing_type)
+    render_breathing_guide(exercise_id)
+
+    # Exhalation reference audio (exercise-specific, e.g. 0.1)
+    from utils.pages_config import get_page_info
+    _einfo = get_page_info(exercise_id)
+    _exh = _einfo.get("exhalation_asset") if _einfo else None
+    if _exh:
+        _exh_path = Path(__file__).resolve().parent.parent / _exh
+        if _exh_path.exists():
+            st.markdown(
+                '<div class="exemplar-block" style="margin-top:0.5rem">'
+                '<div class="exemplar-label">Exhalation reference</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            with open(_exh_path, "rb") as _f:
+                st.audio(_f.read(), format="audio/wav")
+
     st.divider()
 
     st.markdown("**Record your attempt**")

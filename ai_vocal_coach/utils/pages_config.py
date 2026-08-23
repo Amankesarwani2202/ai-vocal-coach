@@ -35,6 +35,7 @@ PAGES_MANIFEST = {
             "Try to keep your airflow steady and smooth",
         ],
         "exemplar_asset": "assets/examples/0_1_warm_up.wav",
+        "exhalation_asset": "assets/examples/0_1_exhalation.wav",
     },
     "2b_Exercise_0.2_Range_Finder": {
         "level": 0,
@@ -64,11 +65,11 @@ PAGES_MANIFEST = {
         "difficulty": "Beginner",
         "duration_minutes": 10,
         "instructions": [
-            "You'll hear a reference note played",
-            "Listen carefully to the pitch",
-            "Sing 'ah' matching that exact pitch",
-            "Hold it for 2 seconds",
-            "Wait for the next note and repeat",
+            "You'll complete 3 rounds of pitch matching",
+            "Each round: listen to the reference tone as many times as you need",
+            "Then sing 'ah' to match that exact pitch",
+            "Hold the note steadily for 2–3 seconds before stopping",
+            "After all 3 rounds you'll see your overall accuracy score",
         ],
         "exemplar_asset": "assets/examples/0_3_ear_training.wav",
     },
@@ -302,6 +303,297 @@ PAGES_MANIFEST = {
         ],
         "exemplar_asset": "assets/examples/2_6_pitch_stability.wav",
     },
+
+    # ── Level 3: Articulation, Vowels & Consonants ─────────────────────────
+    "15_Exercise_3.1_Pure_Italian_Vowels": {
+        "level": 3,
+        "category": "Articulation",
+        "title": "3.1 Pure Italian Vowels",
+        "description": "Sustain each of the five pure vowels A E I O U with consistent tone",
+        "order": 17,
+        "skills": ["Vowel Purity", "Tone Consistency", "Resonance"],
+        "difficulty": "Intermediate",
+        "duration_minutes": 12,
+        "prerequisites": ["Level 2"],
+        "instructions": [
+            "You'll complete 5 rounds — one for each vowel: A, E, I, O, U",
+            "Each round: listen to the reference tone, then sustain that vowel",
+            "Keep the vowel pure and stable — don't let it drift to another vowel",
+            "Hold each vowel for 3–4 seconds with steady airflow",
+            "Imagine the vowel shape staying constant throughout",
+        ],
+        "exemplar_asset": "assets/examples/3_1_italian_vowels.wav",
+    },
+    "16_Exercise_3.2_Vowel_Consistency_Ascending": {
+        "level": 3,
+        "category": "Articulation",
+        "title": "3.2 Vowel Consistency on Ascending Scale",
+        "description": "Maintain identical vowel quality as pitch rises",
+        "order": 18,
+        "skills": ["Vowel Modification", "Ascending Intonation", "Consistency"],
+        "difficulty": "Intermediate",
+        "duration_minutes": 12,
+        "prerequisites": ["3.1"],
+        "instructions": [
+            "Sing a five-note ascending scale on 'AH' (do-re-mi-fa-sol)",
+            "Keep the vowel sound identical on every pitch — don't switch to 'uh' going up",
+            "Maintain steady breath support throughout the scale",
+            "The vowel colour should stay the same from bottom to top",
+            "Breathe deeply before starting and carry that support all the way up",
+        ],
+        "exemplar_asset": "assets/examples/3_2_vowel_ascending.wav",
+    },
+    "17_Exercise_3.3_Vowel_Modification_High_Notes": {
+        "level": 3,
+        "category": "Articulation",
+        "title": "3.3 Vowel Modification on High Notes",
+        "description": "Open the vowel slightly at the passaggio to keep the tone free",
+        "order": 19,
+        "skills": ["Passaggio", "Vowel Modification", "Register Transition"],
+        "difficulty": "Advanced",
+        "duration_minutes": 15,
+        "prerequisites": ["3.2"],
+        "instructions": [
+            "Sing 'AH' ascending from a comfortable middle pitch to your upper range",
+            "As you approach your passaggio (break point), let 'AH' open slightly toward 'AW'",
+            "Keep the tone forward and bright — avoid pulling chest voice up",
+            "The modification should be subtle, not a complete vowel change",
+            "Listen for the tone staying free and connected through the break",
+        ],
+        "exemplar_asset": "assets/examples/3_3_vowel_modification.wav",
+    },
+    "18_Exercise_3.4_Consonant_Clarity": {
+        "level": 3,
+        "category": "Articulation",
+        "title": "3.4 Consonant Clarity",
+        "description": "Sing syllable patterns with clear, defined consonant attacks",
+        "order": 20,
+        "skills": ["Consonant Attack", "Articulation", "Onset Clarity"],
+        "difficulty": "Intermediate",
+        "duration_minutes": 10,
+        "prerequisites": ["3.1"],
+        "instructions": [
+            "Sing the syllable pattern: Na-Na-Na-Na-Na on a comfortable pitch",
+            "Each 'N' onset should be crisp and defined — not blurry",
+            "Follow with: Ma-Ma-Ma, La-La-La, Ra-Ra-Ra",
+            "Keep the vowel 'A' pure between each consonant",
+            "Aim for identical weight and clarity on every syllable",
+        ],
+        "exemplar_asset": "assets/examples/3_4_consonant_clarity.wav",
+    },
+    "19_Exercise_3.5_Tongue_Tension": {
+        "level": 3,
+        "category": "Articulation",
+        "title": "3.5 Releasing Tongue Tension",
+        "description": "Eliminate tongue and jaw tension that clouds vowel resonance",
+        "order": 21,
+        "skills": ["Tension Release", "Vowel Resonance", "Jaw Freedom"],
+        "difficulty": "Intermediate",
+        "duration_minutes": 12,
+        "prerequisites": ["3.1"],
+        "instructions": [
+            "Before singing, gently massage your jaw and let it drop open",
+            "Rest your tongue forward, tip just behind lower front teeth",
+            "Sustain 'AH' for 5 seconds — notice if the tongue bunches or pulls back",
+            "If you hear a 'throaty' quality, consciously release the tongue root",
+            "Repeat on 'EE' and 'OO' — keep the jaw passive and tongue released",
+        ],
+        "exemplar_asset": "assets/examples/3_5_tongue_tension.wav",
+    },
+    "20_Exercise_3.6_Diction_Challenge": {
+        "level": 3,
+        "category": "Articulation",
+        "title": "3.6 Diction Challenge — Speak to Sing",
+        "description": "Carry spoken clarity directly into melodic singing",
+        "order": 22,
+        "skills": ["Diction", "Text Clarity", "Melodic Speech"],
+        "difficulty": "Advanced",
+        "duration_minutes": 15,
+        "prerequisites": ["3.4", "3.5"],
+        "instructions": [
+            "Phase 1 — Speak: say the phrase 'How beautiful upon the mountain' clearly",
+            "Exaggerate each consonant as if speaking to someone far away",
+            "Phase 2 — Sing: sing the same phrase on a simple 5-note descending melody",
+            "Carry every consonant from your spoken version into the sung version",
+            "The clarity of your speech should be audible inside the melody",
+        ],
+        "exemplar_asset": "assets/examples/3_6_diction_challenge.wav",
+    },
+
+    # ── Level 4: Legato & Musical Line ─────────────────────────────────────
+    "21_Exercise_4.1_Connecting_Notes": {
+        "level": 4,
+        "category": "Legato",
+        "title": "4.1 Connecting Notes",
+        "description": "Sing three-note slurs with no audible break between pitches",
+        "order": 23,
+        "skills": ["Legato", "Breath Flow", "Smooth Connection"],
+        "difficulty": "Intermediate",
+        "duration_minutes": 12,
+        "prerequisites": ["Level 3"],
+        "instructions": [
+            "Sing three connected notes do-re-mi on 'AH' in one breath",
+            "Imagine the airflow is a single continuous stream through all three notes",
+            "No glottal stops, no breath sounds between notes",
+            "Keep the vowel stable and the volume even across all three",
+            "Feel the notes as one sustained gesture, not three separate events",
+        ],
+        "exemplar_asset": "assets/examples/4_1_connecting_notes.wav",
+    },
+    "22_Exercise_4.2_Stepwise_Melodies": {
+        "level": 4,
+        "category": "Legato",
+        "title": "4.2 Stepwise Melodies",
+        "description": "Sing a 5-note stepwise melody with seamless connection throughout",
+        "order": 24,
+        "skills": ["Legato Melody", "Phrase Shape", "Breath Arc"],
+        "difficulty": "Intermediate",
+        "duration_minutes": 15,
+        "prerequisites": ["4.1"],
+        "instructions": [
+            "Sing a stepwise melody: do-re-mi-re-do on 'AH'",
+            "Make the shape a smooth arc — rise gently, peak at mi, fall gently back",
+            "No bumps or accents between the notes",
+            "The phrase should sound like one long note that changes pitch",
+            "Take a full breath before starting and use it evenly to the end",
+        ],
+        "exemplar_asset": "assets/examples/4_2_stepwise_melodies.wav",
+    },
+    "23_Exercise_4.3_Breath_Phrasing": {
+        "level": 4,
+        "category": "Legato",
+        "title": "4.3 Breath Phrasing",
+        "description": "Place breaths at phrase ends, not mid-phrase",
+        "order": 25,
+        "skills": ["Phrase Planning", "Breath Economy", "Musical Line"],
+        "difficulty": "Advanced",
+        "duration_minutes": 15,
+        "prerequisites": ["4.2"],
+        "instructions": [
+            "Sing a 4-bar melody in one breath if possible",
+            "If you must breathe, take the breath at the natural phrase boundary (bar 2 end)",
+            "Never break mid-bar unless absolutely necessary",
+            "Plan your breath like a sentence: complete the thought before breathing",
+            "A mid-phrase breath breaks the line — hold on as long as you can",
+        ],
+        "exemplar_asset": "assets/examples/4_3_breath_phrasing.wav",
+    },
+    "24_Exercise_4.4_Melodic_Etude": {
+        "level": 4,
+        "category": "Legato",
+        "title": "4.4 Melodic Étude",
+        "description": "Perform an 8-bar étude with full legato and breath arc",
+        "order": 26,
+        "skills": ["Musical Line", "Legato", "Phrase Shaping", "Stamina"],
+        "difficulty": "Advanced",
+        "duration_minutes": 20,
+        "prerequisites": ["4.3"],
+        "instructions": [
+            "The étude spans 8 bars — plan two breath points at bars 4 and 8",
+            "Every note should flow seamlessly into the next",
+            "Shape each 4-bar phrase as an arc: build to bar 2, resolve at bar 4",
+            "Keep the vowel consistent regardless of pitch",
+            "Finish each phrase with the same energy you started — no trailing off",
+        ],
+        "exemplar_asset": "assets/examples/4_4_melodic_etude.wav",
+    },
+
+    # ── Level 5: Rhythm, Pulse & Musical Timing ────────────────────────────
+    "25_Exercise_5.1_Singing_Metronome": {
+        "level": 5,
+        "category": "Rhythm",
+        "title": "5.1 Singing with a Metronome",
+        "description": "Place every note exactly on the beat at a steady tempo",
+        "order": 27,
+        "skills": ["Pulse", "Beat Accuracy", "Steady Tempo"],
+        "difficulty": "Intermediate",
+        "duration_minutes": 12,
+        "prerequisites": ["Level 4"],
+        "instructions": [
+            "Listen to the click track — internalize the pulse before singing",
+            "Sing quarter notes on 'TA' or 'DA', one per click",
+            "Each note must start exactly on the beat — not before, not after",
+            "Keep going for 4 bars without stopping",
+            "If you drift, reset to the click — don't rush or drag to catch up",
+        ],
+        "exemplar_asset": "assets/examples/5_1_metronome.wav",
+    },
+    "26_Exercise_5.2_Simple_Rhythms": {
+        "level": 5,
+        "category": "Rhythm",
+        "title": "5.2 Simple Rhythmic Patterns",
+        "description": "Clap and sing quarter- and half-note patterns with precision",
+        "order": 28,
+        "skills": ["Note Values", "Quarter Notes", "Half Notes"],
+        "difficulty": "Intermediate",
+        "duration_minutes": 12,
+        "prerequisites": ["5.1"],
+        "instructions": [
+            "Pattern: two quarter notes then one half note (TA TA TAA)",
+            "Clap the pattern first, then sing it on one pitch",
+            "The half note should last exactly two beats — no cutting it short",
+            "Repeat the pattern 4 times in a row at 80 BPM",
+            "Keep your body still — let the rhythm live in your breath, not your body",
+        ],
+        "exemplar_asset": "assets/examples/5_2_simple_rhythms.wav",
+    },
+    "27_Exercise_5.3_Compound_Time": {
+        "level": 5,
+        "category": "Rhythm",
+        "title": "5.3 Compound Time (6/8)",
+        "description": "Feel the compound pulse — two dotted-quarter beats per bar",
+        "order": 29,
+        "skills": ["Compound Meter", "6/8 Feel", "Triplet Subdivision"],
+        "difficulty": "Advanced",
+        "duration_minutes": 15,
+        "prerequisites": ["5.2"],
+        "instructions": [
+            "Count '1-and-a 2-and-a' — two main beats with three subdivisions each",
+            "Sing 'LA-la-la LA-la-la' in 6/8 — stress the 1 and 4",
+            "Feel the lilt — 6/8 has a lilting, wave-like feel, not a march",
+            "Keep the subdivisions even — no rushing the 'and-a'",
+            "4 bars at 60 dotted-quarter BPM",
+        ],
+        "exemplar_asset": "assets/examples/5_3_compound_time.wav",
+    },
+    "28_Exercise_5.4_Clapping_Singing": {
+        "level": 5,
+        "category": "Rhythm",
+        "title": "5.4 Clapping & Singing Together",
+        "description": "Clap a counter-rhythm while sustaining a melodic line",
+        "order": 30,
+        "skills": ["Independence", "Poly-rhythm", "Coordination"],
+        "difficulty": "Advanced",
+        "duration_minutes": 15,
+        "prerequisites": ["5.2"],
+        "instructions": [
+            "Clap quarter notes while singing half notes — two claps per sung note",
+            "The clapping and singing must stay independent — don't merge them",
+            "Start by clapping alone (4 bars), then add singing",
+            "Keep the clap rhythm steady even when the melody moves",
+            "If one falls apart, isolate it and rebuild",
+        ],
+        "exemplar_asset": "assets/examples/5_4_clap_sing.wav",
+    },
+    "29_Exercise_5.5_Syncopation": {
+        "level": 5,
+        "category": "Rhythm",
+        "title": "5.5 Syncopation",
+        "description": "Place note attacks between the beats for expressive rhythmic feel",
+        "order": 31,
+        "skills": ["Syncopation", "Off-beat Placement", "Rhythmic Feel"],
+        "difficulty": "Advanced",
+        "duration_minutes": 15,
+        "prerequisites": ["5.3", "5.4"],
+        "instructions": [
+            "Pattern: rest on beat 1, attack on the 'and' of 1 (off-beat)",
+            "Feel the tension of the note arriving slightly early",
+            "Hold the off-beat note across beat 2 — it lasts 1.5 beats",
+            "Repeat 4 times at 80 BPM — keep the pulse steady underneath",
+            "Tap your foot on every beat while singing the syncopation",
+        ],
+        "exemplar_asset": "assets/examples/5_5_syncopation.wav",
+    },
 }
 
 
@@ -329,7 +621,7 @@ def get_pages_by_category(category):
 def get_level_progress(completed_exercises):
     """Calculate progress for each level."""
     progress = {}
-    for level in [0, 1, 2]:
+    for level in [0, 1, 2, 3, 4, 5]:
         pages = get_pages_by_level(level)
         completed = sum(
             1 for k in pages.keys()
@@ -401,14 +693,18 @@ def get_sidebar_display_name(page_key):
 
 
 def get_level_badge(level):
-    labels = {0: "Diagnostics", 1: "Fundamentals", 2: "Advanced"}
+    labels = {
+        0: "Diagnostics", 1: "Fundamentals", 2: "Advanced",
+        3: "Articulation", 4: "Legato", 5: "Rhythm",
+        6: "Resonance", 7: "Classical", 8: "Repertoire I", 9: "Repertoire II",
+    }
     return labels.get(level, "")
 
 
 def format_page_listing():
     """Format all pages for display."""
     pages_by_level = {}
-    for level in [0, 1, 2]:
+    for level in [0, 1, 2, 3, 4, 5]:
         pages = get_pages_by_level(level)
         pages_by_level[level] = sorted(
             pages.items(),

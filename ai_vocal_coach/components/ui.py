@@ -527,6 +527,175 @@ def inject_custom_css():
             50% {{ opacity: 0.3; }}
         }}
 
+        /* ── Ear Training: round progress ── */
+        .round-progress-header {{
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }}
+        .round-label {{
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: {text_muted};
+        }}
+        .round-note-chip {{
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: {accent};
+            background: {accent_light};
+            border: 1px solid {accent};
+            border-radius: 999px;
+            padding: 0.15rem 0.6rem;
+            letter-spacing: 0.04em;
+        }}
+        .round-dots {{
+            display: flex;
+            gap: 0.45rem;
+            margin-bottom: 1.25rem;
+        }}
+        .round-dot {{
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: {border};
+            transition: background 0.2s ease;
+        }}
+        .round-dot.active {{
+            background: {accent};
+        }}
+        .round-dot.done {{
+            background: {success};
+        }}
+
+        /* ── Ear Training: reference tone card ── */
+        .round-card {{
+            background: {bg_surface};
+            border: 1px solid {border};
+            border-radius: 8px;
+            padding: 1.25rem 1.5rem;
+            margin: 0.75rem 0 1.25rem 0;
+        }}
+        .round-card-label {{
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: {text_muted};
+            margin-bottom: 0.5rem;
+        }}
+        .round-card-note {{
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: {accent};
+            letter-spacing: -0.02em;
+            line-height: 1;
+        }}
+        .round-card-hz {{
+            font-size: 0.85rem;
+            color: {text_muted};
+            margin-top: 0.2rem;
+        }}
+
+        /* ── Ear Training: pitch result card ── */
+        .pitch-result-card {{
+            text-align: center;
+        }}
+        .round-result-row {{
+            margin-bottom: 0.2rem;
+        }}
+        .round-result-label {{
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.4rem;
+        }}
+        .pitch-deviation {{
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: {accent};
+            margin: 0.3rem 0;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+        }}
+        .pitch-sung-hz {{
+            font-size: 0.78rem;
+            color: {text_muted};
+            margin-top: 0.25rem;
+        }}
+
+        /* ── Ear Training: summary table ── */
+        .et-summary-row {{
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.65rem 0;
+            border-bottom: 1px solid {border};
+            flex-wrap: wrap;
+        }}
+        .et-summary-row:last-child {{
+            border-bottom: none;
+        }}
+        .et-round-note {{
+            font-size: 1rem;
+            font-weight: 700;
+            color: {accent};
+            min-width: 2.5rem;
+        }}
+        .et-round-score {{
+            font-size: 0.88rem;
+            font-weight: 600;
+            min-width: 4rem;
+        }}
+        .et-round-quality {{
+            font-size: 0.88rem;
+            color: {text};
+            flex: 1;
+        }}
+        .et-round-cents {{
+            font-size: 0.82rem;
+            color: {text_muted};
+            font-family: 'SF Mono', 'Fira Code', monospace;
+        }}
+
+        /* ── Stage bar: arrow prefix on active step ── */
+        .stage-step.active::before {{
+            content: '▸ ';
+            color: {accent};
+            font-size: 0.7rem;
+        }}
+
+        /* ── Instruction step: subtle hover ── */
+        .instruction-step:hover {{
+            background: {accent_light};
+            border-radius: 4px;
+            margin: 0 -0.5rem;
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }}
+
+        /* ── Feedback item: subtle hover ── */
+        .feedback-item:hover {{
+            background: {warning_light};
+            border-radius: 4px;
+            margin: 0 -0.5rem;
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }}
+
+        /* ── Card utility class ── */
+        .card {{
+            background: {bg_surface};
+            border: 1px solid {border};
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+        }}
+
+        /* ── Button: smoother hover via opacity transition ── */
+        .stButton > button {{
+            transition: background 0.2s ease, opacity 0.15s ease !important;
+        }}
+
         /* Hide footer and Streamlit menu */
         #MainMenu, footer {{
             display: none !important;
@@ -741,6 +910,161 @@ def inject_custom_css():
             audio {{
                 width: 100% !important;
             }}
+        }}
+
+        /* ── Vowel cards (3.1) ─────────────────── */
+        .vowel-card-grid {{
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }}
+        .vowel-card {{
+            background: {bg_surface};
+            border: 2px solid {border};
+            border-radius: 12px;
+            padding: 1rem 0.5rem;
+            text-align: center;
+            transition: border-color 0.2s, transform 0.1s;
+        }}
+        .vowel-card.active {{
+            border-color: {accent};
+            transform: scale(1.04);
+        }}
+        .vowel-card.done {{
+            border-color: {success};
+            opacity: 0.7;
+        }}
+        .vowel-card-letter {{
+            font-size: 2rem;
+            font-weight: 700;
+            color: {accent};
+            line-height: 1;
+        }}
+        .vowel-card-ipa {{
+            font-size: 0.75rem;
+            color: {text_muted};
+            margin-top: 0.25rem;
+        }}
+
+        /* ── Tension meter (3.5) ──────────────── */
+        .tension-meter-wrap {{
+            margin: 1rem 0;
+        }}
+        .tension-meter-track {{
+            height: 14px;
+            border-radius: 7px;
+            background: linear-gradient(90deg, {success} 0%, {accent} 60%, #C0392B 100%);
+            position: relative;
+        }}
+        .tension-meter-needle {{
+            position: absolute;
+            top: -4px;
+            width: 4px;
+            height: 22px;
+            background: {text};
+            border-radius: 2px;
+            transform: translateX(-50%);
+        }}
+        .tension-meter-labels {{
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: {text_muted};
+            margin-top: 4px;
+        }}
+
+        /* ── Legato ribbon (4.x) ──────────────── */
+        .legato-ribbon {{
+            height: 8px;
+            border-radius: 4px;
+            margin: 0.75rem 0;
+            background: linear-gradient(90deg,
+                {accent_light} 0%,
+                {accent} 40%,
+                {accent} 60%,
+                {accent_light} 100%);
+        }}
+        .legato-gap-marker {{
+            display: inline-block;
+            width: 3px;
+            height: 16px;
+            background: #C0392B;
+            border-radius: 2px;
+            margin: 0 2px;
+            vertical-align: middle;
+        }}
+
+        /* ── Metronome beat display (5.x) ─────── */
+        .beat-grid {{
+            display: flex;
+            gap: 0.4rem;
+            margin: 0.75rem 0;
+            flex-wrap: wrap;
+        }}
+        .beat-cell {{
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: {bg_surface};
+            border: 2px solid {border};
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            color: {text_muted};
+            transition: background 0.15s;
+        }}
+        .beat-cell.downbeat {{
+            border-color: {accent};
+            color: {accent};
+            font-weight: 600;
+        }}
+        .beat-cell.on-time {{
+            background: {success_light};
+            border-color: {success};
+            color: {success};
+        }}
+        .beat-cell.late {{
+            background: {warning_light};
+            border-color: {accent};
+            color: {accent};
+        }}
+        .beat-cell.missed {{
+            background: rgba(192, 57, 43, 0.1);
+            border-color: #C0392B;
+            color: #C0392B;
+        }}
+
+        /* ── Diction 2-phase (3.6) ────────────── */
+        .diction-phrase-card {{
+            background: {bg_surface};
+            border: 2px solid {accent};
+            border-radius: 12px;
+            padding: 1.25rem 1.5rem;
+            margin: 1rem 0;
+            font-size: 1.3rem;
+            font-style: italic;
+            color: {text};
+            text-align: center;
+            letter-spacing: 0.01em;
+        }}
+        .phase-step-bar {{
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }}
+        .phase-step {{
+            flex: 1;
+            height: 4px;
+            border-radius: 2px;
+            background: {border};
+        }}
+        .phase-step.active {{
+            background: {accent};
+        }}
+        .phase-step.done {{
+            background: {success};
         }}
         </style>
     """
