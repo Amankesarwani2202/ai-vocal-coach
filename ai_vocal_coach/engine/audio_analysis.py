@@ -2494,10 +2494,20 @@ def _generate_feedback(
         if item not in actionable
     ]
 
-    result = (
-        actionable
-        + positive
-    )
+    result = actionable + positive
+
+    def feedback_time_seconds(item):
+        time_value = item.get("time", 0)
+        if isinstance(time_value, (int, float)):
+            return float(time_value)
+
+        try:
+            minutes, seconds = str(time_value).split(":", 1)
+            return int(minutes) * 60 + float(seconds)
+        except (TypeError, ValueError):
+            return 0.0
+
+    result.sort(key=feedback_time_seconds)
 
     return result[
         :MAX_FEEDBACK_ITEMS
