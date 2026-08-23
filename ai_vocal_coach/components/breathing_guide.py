@@ -26,14 +26,14 @@ def render_breathing_guide(exercise_type="warm_up"):
 
   @keyframes ribs {
     0%   { transform: scaleX(1); }
-    20%  { transform: scaleX(1.10); }
-    26%  { transform: scaleX(1.10); }
+    20%  { transform: scaleX(1.18); }
+    26%  { transform: scaleX(1.18); }
     100% { transform: scaleX(1); }
   }
   @keyframes belly {
     0%   { transform: scaleY(1); }
-    20%  { transform: scaleY(1.07); }
-    26%  { transform: scaleY(1.07); }
+    20%  { transform: scaleY(1.12); }
+    26%  { transform: scaleY(1.12); }
     100% { transform: scaleY(1); }
   }
 </style>
@@ -42,7 +42,7 @@ def render_breathing_guide(exercise_type="warm_up"):
 <div class="wrap">
   <div class="cue" id="cue">Breathe in</div>
 
-  <svg width="180" height="250" viewBox="0 0 180 250" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <svg width="260" height="250" viewBox="0 0 260 250" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect x="80" y="8" width="20" height="26" rx="8" fill="#E2DDD6" stroke="#B45309" stroke-width="1.5"/>
     <path d="M30 46 Q90 36 150 46 L154 68 Q90 58 26 68 Z" fill="#E2DDD6" stroke="#B45309" stroke-width="1.5"/>
     <g class="ribs">
@@ -89,9 +89,9 @@ def render_breathing_guide(exercise_type="warm_up"):
 </html>
 """
 
-    components.html(html, height=320, scrolling=False)
+    components.html(html, height=340, scrolling=False)
 
-    if exercise_type in ("warm_up", "support"):
+    if exercise_type in ("warm_up", "breath_support"):
         st.markdown("""
 - Inhale through your mouth — feel your lower ribs expand outward, not upward
 - Keep shoulders completely still

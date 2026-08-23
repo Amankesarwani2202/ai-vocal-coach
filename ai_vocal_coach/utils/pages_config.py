@@ -71,7 +71,6 @@ PAGES_MANIFEST = {
             "Hold the note steadily for 2–3 seconds before stopping",
             "After all 3 rounds you'll see your overall accuracy score",
         ],
-        "exemplar_asset": "assets/examples/0_3_ear_training.wav",
     },
     # Level 1: Fundamentals
     "3_Exercise_1.1_Diaphragmatic_Support": {

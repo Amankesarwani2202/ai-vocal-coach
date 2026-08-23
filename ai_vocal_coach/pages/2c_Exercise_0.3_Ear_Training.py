@@ -31,12 +31,8 @@ from utils.pages_config import get_page_info
 EXERCISE_ID = "2c_Exercise_0.3_Ear_Training"
 NEXT_PAGE = "pages/3_Exercise_1.1_Diaphragmatic_Support.py"
 
-# C major triad — spans a comfortable mid-voice range
-ROUNDS = [
-    {"round": 1, "note": "C4", "hz": 261.6},
-    {"round": 2, "note": "E4", "hz": 329.6},
-    {"round": 3, "note": "G4", "hz": 392.0},
-]
+# Mid-range note names used when generating random targets.
+_NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 _QUALITY_META = {
     "excellent": ("Excellent match",        "score-good"),
@@ -59,6 +55,15 @@ def _init_et_state():
         st.session_state.et_round   = 1
         st.session_state.et_inner   = "listen"
         st.session_state.et_results = []
+        midi_notes = np.random.choice(np.arange(60, 72), size=3, replace=False)
+        st.session_state.et_rounds = [
+            {
+                "round": index + 1,
+                "note": f"{_NOTE_NAMES[midi % 12]}{midi // 12 - 1}",
+                "hz": 440.0 * (2.0 ** ((int(midi) - 69) / 12.0)),
+            }
+            for index, midi in enumerate(midi_notes)
+        ]
         st.session_state.et_initialized = True
 
 
@@ -67,6 +72,10 @@ def _reset_et_state():
     st.session_state.et_round   = 1
     st.session_state.et_inner   = "listen"
     st.session_state.et_results = []
+
+
+def _rounds():
+    return st.session_state.get("et_rounds", [])
 
 
 # ─────────────────────────────────────────────
@@ -105,7 +114,7 @@ def _round_dots(current, total=3):
 
 def _listen_stage(round_info):
     rnd, note, hz = round_info["round"], round_info["note"], round_info["hz"]
-    _round_header(rnd, len(ROUNDS), note)
+    _round_header(rnd, len(_rounds()), note)
     _round_dots(rnd)
 
     st.markdown(f"""
@@ -129,7 +138,7 @@ def _listen_stage(round_info):
 
 def _record_stage(round_info):
     rnd, note, hz = round_info["round"], round_info["note"], round_info["hz"]
-    _round_header(rnd, len(ROUNDS), note)
+    _round_header(rnd, len(_rounds()), note)
     _round_dots(rnd)
 
     st.markdown(f"**Sing 'ah' and match: {note} ({hz:.0f} Hz)**")
@@ -165,7 +174,7 @@ def _record_stage(round_info):
 
 def _result_stage(round_info):
     rnd, note = round_info["round"], round_info["note"]
-    _round_header(rnd, len(ROUNDS), note)
+    _round_header(rnd, len(_rounds()), note)
     _round_dots(rnd)
 
     result = next(
@@ -210,7 +219,7 @@ def _result_stage(round_info):
         """, unsafe_allow_html=True)
 
     st.markdown("")
-    is_last = (rnd == len(ROUNDS))
+    is_last = (rnd == len(_rounds()))
 
     if is_last:
         if st.button("See final results →", key=f"et_finish_{rnd}"):
@@ -240,7 +249,7 @@ def _render_exercise_stage():
     _init_et_state()
     rnd        = st.session_state.et_round
     inner      = st.session_state.et_inner
-    round_info = ROUNDS[rnd - 1]
+    round_info = _rounds()[rnd - 1]
 
     if inner == "listen":
         _listen_stage(round_info)

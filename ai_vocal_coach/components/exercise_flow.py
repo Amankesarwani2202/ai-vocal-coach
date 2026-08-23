@@ -156,7 +156,39 @@ def render_recording_stage(exercise_id, breathing_type="support"):
                 st.rerun()
         return None
 
-    render_breathing_guide(exercise_id)
+    if exercise_type in {"warm_up", "breath_support", "silent_breath"}:
+        render_breathing_guide(exercise_type)
+    else:
+        guidance = {
+            "range_finder": (
+                "Sing one comfortable note, then step upward and downward. "
+                "Stop at the highest and lowest notes you can sing comfortably."
+            ),
+            "smooth_onset": (
+                "Start the 'ah' gently, sustain it for 3-4 seconds, "
+                "and release without a hard attack."
+            ),
+            "legato": (
+                "Sing do-re-mi on 'ah' as one connected phrase. "
+                "Keep the airflow moving between notes."
+            ),
+            "scale": (
+                "Sing do-re-mi-fa-sol on 'ah'. Keep each note clear "
+                "while maintaining steady breath support."
+            ),
+            "staccato": (
+                "First sing short, separated notes. Then sing the same notes "
+                "smoothly connected, noticing the contrast."
+            ),
+        }
+        st.markdown("**Your focus**")
+        st.info(guidance.get(exercise_type, "Follow the exercise instructions while recording."))
+        if exercise_type == "staccato":
+            with st.expander("What do staccato and legato mean?"):
+                st.markdown(
+                    "**Staccato** means short, separated notes. "
+                    "**Legato** means smooth, connected notes."
+                )
 
     # Exhalation reference audio (exercise-specific, e.g. 0.1)
     from utils.pages_config import get_page_info
@@ -379,6 +411,15 @@ def render_results_stage(exercise_id, next_page):
             feedback_list = [{"time": "", "message": "Recording was too short for detailed feedback. Try holding notes longer."}]
     else:
         feedback_list = raw_feedback
+
+    feedback_list = sorted(
+        feedback_list,
+        key=lambda item: (
+            _timestamp_to_seconds(item.get("time", "0:00"))
+            if isinstance(item, dict)
+            else 0.0
+        ),
+    )
 
     if feedback_list:
         st.markdown("**Feedback**")
