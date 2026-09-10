@@ -5,7 +5,7 @@ Generates encouraging, non-technical feedback for users
 """
 
 
-def generate_coaching_summary(score, feedback_list, subscores_dict):
+def generate_coaching_summary(score, feedback_list, subscores_dict, exercise_type=None):
     """
     Generate an encouraging coaching summary.
 
@@ -21,11 +21,17 @@ def generate_coaching_summary(score, feedback_list, subscores_dict):
 
     # Normalize feedback_list: accept list of strings or list of dicts
     flat_feedback = []
+    seen_feedback = set()
+    deduplicate_feedback = exercise_type == "scale_ascending"
     for f in feedback_list:
         if isinstance(f, dict):
-            flat_feedback.append(f.get("message", ""))
+            message = f.get("message", "")
         else:
-            flat_feedback.append(str(f))
+            message = str(f)
+        normalized = message.strip().lower()
+        if normalized and (not deduplicate_feedback or normalized not in seen_feedback):
+            flat_feedback.append(message)
+            seen_feedback.add(normalized)
 
     import re
 
@@ -65,22 +71,43 @@ def generate_coaching_summary(score, feedback_list, subscores_dict):
         elif score >= 70:
             summary["what_went_well"].append("You're on the right track.")
 
-    # Areas to work on
+    # Areas to work on, without repeating the same raw event in the summary.
     for feedback in areas_to_improve:
-        summary["work_on"].append(feedback.strip())
+        if not deduplicate_feedback or feedback.strip() not in summary["work_on"]:
+            summary["work_on"].append(feedback.strip())
 
     if not summary["work_on"]:
         for component, sub_score in subscores_dict.items():
             if sub_score < 70:
                 summary["work_on"].append(f"Focus on {component.lower()}.")
 
-    # Next time guidance
     if score >= 85:
         summary["next_time"] = "You're mastering this! Try to maintain this consistency, then push for even higher scores."
     elif score >= 70:
         summary["next_time"] = "Good progress! Work on the areas above, then try again. You'll see improvement with practice."
+    elif exercise_type == "scale_ascending":
+        summary["next_time"] = "Focus on one thing at a time, then try again and compare the same measurement."
     else:
         summary["next_time"] = "Don't worry—even professionals started here. Focus on one thing at a time, then try again."
+
+    action_by_component = {
+        "Evenness": "Repeat a supported five-note scale, using one even breath from the first note to the last.",
+        "Pitch Accuracy": "Slow the pattern down and repeat it with a reference tone, checking each landing before moving on.",
+        "Range": "Repeat the scale at a comfortable starting pitch, keeping the top note as clear as the first.",
+        "Control": "Repeat the descending pattern while keeping the same breath support as the starting note.",
+        "Pitch Stability": "Repeat the sustained-note exercise and make small pitch corrections early rather than searching for the note.",
+        "Breath Support": "Repeat a supported breathing exercise, keeping the ribs expanded while the airflow stays even.",
+        "Continuity": "Repeat the phrase slowly on one breath, removing any gap or breath pulse between notes.",
+    }
+    weakest = (
+        min(subscores_dict.items(), key=lambda item: item[1], default=None)
+        if exercise_type == "scale_ascending"
+        else None
+    )
+    if weakest and weakest[1] < 70:
+        action = action_by_component.get(weakest[0])
+        if action:
+            summary["next_time"] = action
 
     return summary
 

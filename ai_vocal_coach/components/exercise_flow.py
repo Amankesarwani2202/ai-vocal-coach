@@ -150,9 +150,10 @@ def render_introduction_stage(exercise_info):
 def render_recording_stage(exercise_id, breathing_type="support"):
     from components.breathing_guide import render_breathing_guide
     from components.exercise_guides import render_exercise_guide
-    from engine.audio_analysis import exercise_type_from_id, analyze_audio
+    from engine.audio_analysis import exercise_type_from_id, analyze_audio, generate_click_track
 
     exercise_type = exercise_type_from_id(exercise_id)
+    is_major_scale_ascending = exercise_type == "scale_ascending"
 
     if st.session_state.get("noise_warning_shown") and not st.session_state.get("noise_continue"):
         st.markdown("""
@@ -175,6 +176,13 @@ def render_recording_stage(exercise_id, breathing_type="support"):
         render_breathing_guide(exercise_type)
     else:
         render_exercise_guide(exercise_type)
+        from utils.pages_config import get_page_info
+        exercise_info = get_page_info(exercise_id) or {}
+        instructions = exercise_info.get("instructions", [])
+        if instructions and is_major_scale_ascending:
+            with st.expander("Keep the preparation instructions open", expanded=True):
+                for number, instruction in enumerate(instructions, 1):
+                    st.markdown(f"**{number}.** {instruction}")
         guidance = {
             "range_finder": (
                 "Sing one comfortable note, then step upward and downward. "
@@ -189,8 +197,7 @@ def render_recording_stage(exercise_id, breathing_type="support"):
                 "Keep the airflow moving between notes."
             ),
             "scale": (
-                "Sing do-re-mi-fa-sol on 'oo'. Keep each note clear "
-                "while maintaining steady breath support."
+                "Sing the exercise's written scale pattern. Pitch changes are expected; focus on landing each step cleanly and keeping each note steady."
             ),
             "staccato": (
                 "First sing do-do-do as short, separated notes. Then repeat "
@@ -230,7 +237,21 @@ def render_recording_stage(exercise_id, breathing_type="support"):
     st.divider()
 
     st.markdown("**Record your attempt**")
-    st.caption("Press the microphone button below to record. Press stop when you're done.")
+    if is_major_scale_ascending:
+        st.caption("Use the count-in to settle your pace, then press the microphone button. Press stop when you're done.")
+        if st.button("Start 4-beat count-in", key=f"count_in_{exercise_id}"):
+            st.session_state[f"count_in_ready_{exercise_id}"] = True
+            st.rerun()
+
+        if st.session_state.get(f"count_in_ready_{exercise_id}"):
+            st.markdown(
+                '<div class="count-in" role="status"><strong>Count-in ready</strong> · 1 · 2 · 3 · 4</div>',
+                unsafe_allow_html=True,
+            )
+            st.audio(generate_click_track(bpm=60, bars=8, beats_per_bar=4), format="audio/wav")
+            st.caption("The first four beats are your count-in. Leave this metronome playing while you record to keep a steady pulse.")
+    else:
+        st.caption("Press the microphone button below to record. Press stop when you're done.")
 
     audio_input = st.audio_input("Record", key=f"audio_rec_{exercise_id}", label_visibility="hidden")
 
@@ -361,6 +382,89 @@ def _render_waveform(audio_bytes, analysis=None):
         pass
 
 
+def _render_pitch_target_chart(analysis, exercise_id):
+    """Compare recorded pitch with the expected scale or arpeggio shape."""
+    if not analysis or not analysis.get("pitch_data"):
+        return
+
+    from engine.audio_analysis import exercise_type_from_id
+
+    patterns = {"scale_ascending": [0, 2, 4, 5, 7, 9, 11, 12]}
+    pattern = patterns.get(exercise_type_from_id(exercise_id))
+    if not pattern:
+        return
+
+    try:
+        import plotly.graph_objects as go
+
+        pitch_data = analysis["pitch_data"]
+        times = np.asarray(pitch_data.get("times", []), dtype=float)
+        f0 = np.asarray(
+            [value if value is not None else np.nan for value in pitch_data.get("f0", [])],
+            dtype=float,
+        )
+        valid = np.isfinite(times) & np.isfinite(f0) & (f0 > 0)
+        if np.sum(valid) < 6:
+            return
+
+        actual_times = times[valid]
+        actual_f0 = f0[valid]
+        anchor = float(np.median(actual_f0[: max(3, len(actual_f0) // 8)]))
+        if anchor <= 0:
+            return
+
+        duration = float(max(actual_times[-1], 0.1))
+        note_times = np.linspace(0, duration, len(pattern))
+        target_f0 = anchor * (2.0 ** (np.asarray(pattern, dtype=float) / 12.0))
+        target_at_actual = np.interp(actual_times, note_times, target_f0)
+        deviation_cents = np.abs(1200.0 * np.log2(actual_f0 / target_at_actual))
+        wavering = deviation_cents > 70
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=actual_times,
+            y=actual_f0,
+            mode="lines",
+            name="Your pitch",
+            line=dict(color="#2563eb", width=2),
+            connectgaps=False,
+            hovertemplate="Your pitch: %{y:.0f} Hz<extra></extra>",
+        ))
+        fig.add_trace(go.Scatter(
+            x=note_times,
+            y=target_f0,
+            mode="lines+markers",
+            name="Target shape",
+            line=dict(color="#c2410c", width=2, dash="dash"),
+            marker=dict(size=7),
+            hovertemplate="Target: %{y:.0f} Hz<extra></extra>",
+        ))
+        if np.any(wavering):
+            fig.add_trace(go.Scatter(
+                x=actual_times[wavering],
+                y=actual_f0[wavering],
+                mode="markers",
+                name="Needs attention",
+                marker=dict(color="#dc2626", size=6),
+                hovertemplate="Away from target<extra></extra>",
+            ))
+
+        fig.update_layout(
+            height=260,
+            margin=dict(l=0, r=0, t=10, b=0),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis_title="Time",
+            yaxis_title="Pitch (Hz)",
+            legend=dict(orientation="h", y=1.12),
+        )
+        st.markdown("**Pitch against the target shape**")
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        st.caption("Blue is your pitch, orange is the expected pattern, and red marks larger deviations from the target.")
+    except Exception:
+        return
+
+
 def _recording_duration_seconds(audio_bytes):
     try:
         with wave.open(io.BytesIO(audio_bytes), 'rb') as wf:
@@ -432,6 +536,9 @@ def render_results_stage(exercise_id, next_page):
         st.audio(recorded, format="audio/wav")
         rec_duration = _recording_duration_seconds(recorded)
 
+        if exercise_type == "scale_ascending":
+            _render_pitch_target_chart(analysis, exercise_id)
+
     st.divider()
 
     # Filter feedback to actual recording duration
@@ -474,7 +581,13 @@ def render_results_stage(exercise_id, next_page):
 
     # Coaching summary
     from engine.coaching import generate_coaching_summary
-    summary       = generate_coaching_summary(score, feedback_list, subscores)
+    from engine.audio_analysis import exercise_type_from_id
+    summary       = generate_coaching_summary(
+        score,
+        feedback_list,
+        subscores,
+        exercise_type=exercise_type_from_id(exercise_id),
+    )
     what_went_well = summary.get("what_went_well", [])
     work_on        = summary.get("work_on", [])
     next_time      = summary.get("next_time", "")

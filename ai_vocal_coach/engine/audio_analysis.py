@@ -1679,8 +1679,11 @@ def _subscores(
         rms
     )
 
-    ps = _pitch_stability(
-        f0
+    scale_exercise = exercise_type == "scale_ascending"
+    ps = (
+        _scale_pitch_stability(f0)
+        if scale_exercise
+        else _pitch_stability(f0)
     )
 
     energy = _breath_support(
@@ -2112,6 +2115,36 @@ def _window_pitch_quality(segment):
     return mad * 1.4826
 
 
+def _window_step_pitch_quality(segment):
+    """Measure wobble after removing the broad pitch movement of a step."""
+    segment = np.asarray(segment, dtype=float)
+    voiced = segment[np.isfinite(segment) & (segment > 0)]
+    if len(voiced) < 6:
+        return None
+
+    cents = 1200.0 * np.log2(voiced / np.median(voiced))
+    trend = np.linspace(cents[0], cents[-1], len(cents))
+    residual = cents - trend
+    return float(np.median(np.abs(residual - np.median(residual))) * 1.4826)
+
+
+def _scale_pitch_stability(f0):
+    """Score steadiness within scale steps while allowing note-to-note motion."""
+    values = np.asarray(f0, dtype=float)
+    if len(values) < MIN_VOICED_FRAMES:
+        return 50
+
+    window_size = max(12, len(values) // 8)
+    qualities = []
+    for start in range(0, len(values), window_size):
+        quality = _window_step_pitch_quality(values[start:start + window_size])
+        if quality is not None:
+            qualities.append(quality)
+    if not qualities:
+        return 50
+    return int(np.clip(100 - np.median(qualities) * 1.5, 0, 100))
+
+
 def _generate_feedback(
     y,
     sr,
@@ -2257,8 +2290,32 @@ def _generate_feedback(
         # Pitch feedback
         # --------------------------------------------------------------
 
-        pitch_error = _window_pitch_quality(
-            segment_f0
+        scale_exercise = exercise_type == "scale_ascending"
+        window_number = start // window_frames
+        if scale_exercise:
+            high_pitch_messages = (
+                "The note transition is clear, but the landing is wavering — hold each scale step steady before moving on",
+                "You reached the next pitch, but it is still unsettled — give each step a steady centre",
+            )
+            moderate_pitch_messages = (
+                "This note is slightly unsettled — let it arrive, then keep the pitch steady",
+                "The pitch is close here — stay with the note for a moment before the next step",
+            )
+            steady_pitch_messages = ("Scale step is steady", "This step is landing cleanly")
+        else:
+            high_pitch_messages = (
+                "Pitch is moving quite a bit — try to settle on the target note",
+                "The sustained pitch is wandering — return gently to the centre of the note",
+            )
+            moderate_pitch_messages = (
+                "Some pitch drift here — try to hold the target more steadily",
+                "The note is nearly centred — make a small correction and stay there",
+            )
+            steady_pitch_messages = ("Pitch is steady here", "The pitch is holding well")
+        pitch_error = (
+            _window_step_pitch_quality(segment_f0)
+            if scale_exercise
+            else _window_pitch_quality(segment_f0)
         )
 
         if pitch_error is not None:
@@ -2269,8 +2326,7 @@ def _generate_feedback(
                     {
                         "time": _ts(mid_time),
                         "message": (
-                            "Pitch is moving quite a bit "
-                            "— try to settle on the target note"
+                            high_pitch_messages[window_number % len(high_pitch_messages)]
                         ),
                     }
                 )
@@ -2281,8 +2337,7 @@ def _generate_feedback(
                     {
                         "time": _ts(mid_time),
                         "message": (
-                            "Some pitch drift here "
-                            "— try to hold the target more steadily"
+                            moderate_pitch_messages[window_number % len(moderate_pitch_messages)]
                         ),
                     }
                 )
@@ -2298,7 +2353,7 @@ def _generate_feedback(
                     {
                         "time": _ts(mid_time),
                         "message": (
-                            "Pitch is steady here"
+                            steady_pitch_messages[window_number % len(steady_pitch_messages)]
                         ),
                     }
                 )
