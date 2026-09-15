@@ -11,6 +11,7 @@ from components.exercise_flow import (
     render_stage_indicator,
 )
 from components.ui import inject_custom_css, render_top_nav
+from utils.detailed_instructions import get_detailed_instructions
 from utils.pages_config import get_page_info
 from utils.state import init_session_state
 
@@ -25,6 +26,15 @@ def run_generic_exercise(exercise_id, next_page):
     if not exercise_info:
         st.error(f"Exercise {exercise_id} not found.")
         st.stop()
+
+    # Keep the central manifest unchanged. For exercises with expanded
+    # guidance, create a shallow copy and override only the instructions
+    # shown on the preparation screen. Recording, analysis, scoring,
+    # navigation, and all other metadata continue using the existing flow.
+    detailed_instructions = get_detailed_instructions(exercise_id)
+    if detailed_instructions:
+        exercise_info = dict(exercise_info)
+        exercise_info["instructions"] = detailed_instructions
 
     init_exercise_flow()
     reset_for_new_exercise(exercise_id)
