@@ -708,52 +708,83 @@ def render_results_stage(exercise_id, next_page):
     if feedback_list:
         st.markdown("**Feedback**")
 
-        # Group repeated messages — collect all timestamps per normalised message text.
+        _SEVERITY_DOT = {
+            "high": "🔴", "medium": "🟡", "low": "🔵", "positive": "🟢",
+        }
+
+        # Separate detector-based items (have timing key) from legacy items
+        _post_take = []
+        _summary_items = []
+        _legacy = []
         import re as _re
-        _grouped: dict = {}  # normalised_msg -> {"display": str, "times": list[str]}
-        _ungrouped = []      # items that have no timestamp (plain strings)
         for _item in feedback_list:
-            if isinstance(_item, dict):
-                _msg = _item.get("message", "")
-                _t   = _item.get("time", "")
-                _key = _re.sub(r'\s+', ' ', _msg.strip().lower())
-                if _key:
-                    if _key not in _grouped:
-                        _grouped[_key] = {"display": _msg.strip(), "times": []}
-                    if _t:
-                        _grouped[_key]["times"].append(_t)
+            if not isinstance(_item, dict):
+                _legacy.append(str(_item))
+                continue
+            _timing = _item.get("timing")
+            if _timing == "summary":
+                _summary_items.append(_item)
+            elif _timing in ("post_take", "real_time"):
+                _post_take.append(_item)
             else:
-                _ungrouped.append(str(_item))
+                _legacy.append(_item)
+
+        # Group repeated messages — collect all timestamps per normalised message text.
+        def _render_group(items):
+            _grouped: dict = {}
+            for _item in items:
+                if isinstance(_item, dict):
+                    _msg = _item.get("message", "")
+                    _t = _item.get("time", "")
+                    _sev = _item.get("severity", "")
+                    _key = _re.sub(r'\s+', ' ', _msg.strip().lower())
+                    if _key:
+                        if _key not in _grouped:
+                            _grouped[_key] = {"display": _msg.strip(), "times": [], "severity": _sev}
+                        if _t:
+                            _grouped[_key]["times"].append(_t)
+                else:
+                    _grouped[str(_item)] = {"display": str(_item), "times": [], "severity": ""}
+            html = ""
+            for _entry in _grouped.values():
+                _disp = _entry["display"]
+                _times = _entry["times"]
+                _dot = _SEVERITY_DOT.get(_entry["severity"], "")
+                _prefix = f"{_dot} " if _dot else ""
+                if len(_times) > 1:
+                    _ts_str = " · ".join(
+                        f'<span class="feedback-timestamp">{_t}</span>' for _t in _times
+                    )
+                    html += (
+                        f'<div class="feedback-item">'
+                        f'<span class="feedback-text">{_prefix}{_disp}</span>'
+                        f'<div style="margin-top:0.2rem;font-size:0.8rem">{_ts_str}</div>'
+                        f'</div>'
+                    )
+                elif _times:
+                    html += (
+                        f'<div class="feedback-item">'
+                        f'<span class="feedback-timestamp">{_times[0]}</span>'
+                        f'<span class="feedback-text">{_prefix}{_disp}</span>'
+                        f'</div>'
+                    )
+                else:
+                    html += (
+                        f'<div class="feedback-item">'
+                        f'<span class="feedback-text">{_prefix}{_disp}</span>'
+                        f'</div>'
+                    )
+            return html
 
         items_html = ""
-        for _entry in _grouped.values():
-            _disp = _entry["display"]
-            _times = _entry["times"]
-            if len(_times) > 1:
-                _ts_str = " · ".join(
-                    f'<span class="feedback-timestamp">{_t}</span>' for _t in _times
-                )
-                items_html += (
-                    f'<div class="feedback-item">'
-                    f'<span class="feedback-text">{_disp}</span>'
-                    f'<div style="margin-top:0.2rem;font-size:0.8rem">{_ts_str}</div>'
-                    f'</div>'
-                )
-            elif _times:
-                items_html += (
-                    f'<div class="feedback-item">'
-                    f'<span class="feedback-timestamp">{_times[0]}</span>'
-                    f'<span class="feedback-text">{_disp}</span>'
-                    f'</div>'
-                )
-            else:
-                items_html += (
-                    f'<div class="feedback-item">'
-                    f'<span class="feedback-text">{_disp}</span>'
-                    f'</div>'
-                )
-        for _s in _ungrouped:
-            items_html += f'<div class="feedback-item"><span class="feedback-text">{_s}</span></div>'
+        if _post_take:
+            items_html += _render_group(_post_take)
+        if _summary_items:
+            if _post_take:
+                items_html += '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-muted,#6B6560);font-weight:600">Overall</div>'
+            items_html += _render_group(_summary_items)
+        if _legacy:
+            items_html += _render_group(_legacy)
 
         st.markdown(items_html, unsafe_allow_html=True)
 

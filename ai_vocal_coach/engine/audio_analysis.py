@@ -76,6 +76,9 @@ EDGE_IGNORE_SECONDS = 0.20
 # Number of feedback messages returned to the UI.
 MAX_FEEDBACK_ITEMS = 8
 
+# Reverse map: exercise_type -> exercise_id (e.g. "scale_ascending" -> "2.1")
+_EXERCISE_ID_FROM_TYPE = {}  # populated lazily after _EXERCISE_TYPE_MAP is defined
+
 # These exercises deliberately change notes. Analyze the steadiness of each
 # landing instead of treating the written melodic motion as pitch drift.
 _PITCH_MOVEMENT_EXPECTED_TYPES = frozenset({
@@ -88,6 +91,7 @@ _PITCH_MOVEMENT_EXPECTED_TYPES = frozenset({
     "arpeggios",
     "vowel_ascending",
     "vowel_modification",
+    "diction_challenge",
     "legato_notes",
     "legato_melody",
     "breath_phrasing",
@@ -2169,6 +2173,53 @@ def _scale_pitch_stability(f0):
     return int(np.clip(100 - np.median(qualities) * 1.5, 0, 100))
 
 
+def _run_exercise_detectors(y, sr, f0, voiced_flag, rms, times, exercise_type, duration):
+    """Run structured error detectors for exercises 1.5–4.5.
+    Returns (findings_list, feedback_items_list)."""
+    exercise_id = _EXERCISE_ID_FROM_TYPE.get(exercise_type)
+    if not exercise_id:
+        return [], []
+    try:
+        from engine.detectors.registry import run_detectors
+        from engine.feedback_copy import get_feedback_text, get_positive_feedback
+    except Exception:
+        return [], []
+    findings = run_detectors(exercise_id, y, sr, f0, voiced_flag, rms, times, duration)
+    items = []
+    for finding in findings:
+        eid = finding.get("error_id", "")
+        params = finding.get("params", {})
+        text = get_feedback_text(eid, params)
+        if not text:
+            continue
+        ts = finding.get("timestamp_s")
+        time_str = _ts(ts) if ts is not None else "0:00"
+        items.append({
+            "time": time_str,
+            "message": text,
+            "error_id": eid,
+            "severity": finding.get("severity", "low"),
+            "timing": finding.get("timing", "post_take"),
+        })
+    if not findings:
+        items.append({
+            "time": "0:00",
+            "message": get_positive_feedback(),
+            "severity": "positive",
+            "timing": "summary",
+        })
+    return findings, items
+
+
+def _merge_detector_feedback(feedback, y, sr, f0, voiced_flag, rms, times,
+                             exercise_type, duration):
+    """Run detectors and append their feedback items to the list in-place."""
+    _, items = _run_exercise_detectors(
+        y, sr, f0, voiced_flag, rms, times, exercise_type, duration,
+    )
+    feedback.extend(items)
+
+
 def _generate_feedback(
     y,
     sr,
@@ -2674,6 +2725,13 @@ def _generate_feedback(
         })
 
     # ------------------------------------------------------------------
+    # Structured detector findings (Levels 1–4)
+    # ------------------------------------------------------------------
+
+    _merge_detector_feedback(feedback, y, sr, f0, voiced_flag, rms, times,
+                             exercise_type, duration)
+
+    # ------------------------------------------------------------------
     # Deduplicate
     # ------------------------------------------------------------------
 
@@ -2832,6 +2890,9 @@ _EXERCISE_TYPE_MAP = {
     "9.3": "repertoire_english_song",
     "9.4": "repertoire_raga_vocalise",
 }
+
+
+_EXERCISE_ID_FROM_TYPE.update({v: k for k, v in _EXERCISE_TYPE_MAP.items()})
 
 
 def exercise_type_from_id(exercise_id):
@@ -3038,6 +3099,11 @@ def analyze_audio(
         duration,
     )
 
+    # Structured detector findings (separate from feedback for UI rendering)
+    detector_findings, _ = _run_exercise_detectors(
+        y, sr, f0, voiced_flag, rms, times, exercise_type, duration,
+    )
+
     # --------------------------------------------------------------
     # Compact pitch data for UI waveform
     # --------------------------------------------------------------
@@ -3105,6 +3171,7 @@ def analyze_audio(
             duration
         ),
         "pitch_data": pitch_data,
+        "detector_findings": detector_findings,
 
         # Optional diagnostics.
         "analysis_meta": {

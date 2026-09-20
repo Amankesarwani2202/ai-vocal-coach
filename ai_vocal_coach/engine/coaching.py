@@ -47,18 +47,27 @@ def generate_coaching_summary(score, feedback_list, subscores_dict, exercise_typ
                     return True
         return False
 
-    POSITIVE_KW = ["good", "strong", "excellent", "great", "consistent", "clean", "steady", "solid", "well", "clear", "smooth"]
-    NEGATIVE_KW = ["less stable", "less steady", "wobble", "wobbled", "uneven", "improve", "strained", "flat", "sharp", "breathy", "crack", "break", "drift", "thin", "gap", "noisy"]
+    POSITIVE_KW = ["good", "strong", "excellent", "great", "consistent", "clean", "steady", "solid", "well", "clear", "smooth", "nicely done", "nailed"]
+    NEGATIVE_KW = ["less stable", "less steady", "wobble", "wobbled", "uneven", "improve", "strained", "flat", "sharp", "breathy", "crack", "break", "drift", "thin", "gap", "noisy", "tension", "pushed", "rushed", "blurry", "dropped", "faded", "softer"]
 
-    # A message is positive if it has positive keywords and NO negative keywords
+    # Build severity lookup from feedback_list dicts
+    _severity_map = {}
+    for f in feedback_list:
+        if isinstance(f, dict) and f.get("severity"):
+            _severity_map[f.get("message", "").strip().lower()] = f["severity"]
+
+    # A message is positive if it has positive keywords and NO negative keywords,
+    # OR if its severity is "positive"
     positive_feedback = [
         f for f in flat_feedback
-        if _matches(f, POSITIVE_KW) and not _matches(f, NEGATIVE_KW)
+        if (_matches(f, POSITIVE_KW) and not _matches(f, NEGATIVE_KW))
+        or _severity_map.get(f.strip().lower()) == "positive"
     ]
-    # A message is a concern if it has negative keywords
+    # A message is a concern if it has negative keywords or a non-positive severity
     areas_to_improve = [
         f for f in flat_feedback
         if _matches(f, NEGATIVE_KW)
+        or _severity_map.get(f.strip().lower()) in ("high", "medium")
     ]
 
     # What went well
