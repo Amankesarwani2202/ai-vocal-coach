@@ -22,7 +22,7 @@ def generate_coaching_summary(score, feedback_list, subscores_dict, exercise_typ
     # Normalize feedback_list: accept list of strings or list of dicts
     flat_feedback = []
     seen_feedback = set()
-    deduplicate_feedback = exercise_type == "scale_ascending"
+    deduplicate_feedback = True
     for f in feedback_list:
         if isinstance(f, dict):
             message = f.get("message", "")
@@ -85,10 +85,8 @@ def generate_coaching_summary(score, feedback_list, subscores_dict, exercise_typ
         summary["next_time"] = "You're mastering this! Try to maintain this consistency, then push for even higher scores."
     elif score >= 70:
         summary["next_time"] = "Good progress! Work on the areas above, then try again. You'll see improvement with practice."
-    elif exercise_type == "scale_ascending":
-        summary["next_time"] = "Focus on one thing at a time, then try again and compare the same measurement."
     else:
-        summary["next_time"] = "Don't worry—even professionals started here. Focus on one thing at a time, then try again."
+        summary["next_time"] = "Focus on one thing at a time, then try again and compare the same measurement."
 
     action_by_component = {
         "Evenness": "Repeat a supported five-note scale, using one even breath from the first note to the last.",
@@ -98,16 +96,38 @@ def generate_coaching_summary(score, feedback_list, subscores_dict, exercise_typ
         "Pitch Stability": "Repeat the sustained-note exercise and make small pitch corrections early rather than searching for the note.",
         "Breath Support": "Repeat a supported breathing exercise, keeping the ribs expanded while the airflow stays even.",
         "Continuity": "Repeat the phrase slowly on one breath, removing any gap or breath pulse between notes.",
+        "Clarity": "Isolate the transition or consonant that sounds blurred and repeat it 5 times at half speed.",
+        "Tone": "Repeat on a single vowel ('ah') focusing on an open jaw and relaxed throat, not extra pressure.",
+        "Leap Accuracy": "Hear the target note in your head before the leap, then jump directly to it without sliding.",
+        "Interval Accuracy": "Sing the lower note, imagine the higher one, then sing both again — only move once the higher note is clear in your mind.",
+        "Scale Accuracy": "Revisit the scale one step at a time, checking each pitch against a keyboard or reference tone before moving on.",
+        "Vowel Consistency": "Fix your mouth shape on the first note and keep it identical through every pitch change.",
     }
-    weakest = (
-        min(subscores_dict.items(), key=lambda item: item[1], default=None)
-        if exercise_type == "scale_ascending"
-        else None
-    )
+    _follow_up_exercises = {
+        "Evenness": "Exercise 2.1 (Major Scale Ascending)",
+        "Pitch Accuracy": "Exercise 2.1 (Major Scale Ascending)",
+        "Scale Accuracy": "Exercise 2.2 (Major Scale Descending)",
+        "Range": "Exercise 2.3 (Minor Scale)",
+        "Leap Accuracy": "Exercise 2.4 (Interval Jumps)",
+        "Interval Accuracy": "Exercise 2.4 (Interval Jumps)",
+        "Control": "Exercise 2.5 (Arpeggios)",
+        "Pitch Stability": "Exercise 2.6 (Pitch Stability)",
+        "Vowel Consistency": "Exercise 3.1 (Vowel Sustain)",
+        "Tone": "Exercise 3.2 (Vowel Ascending)",
+        "Continuity": "Exercise 3.5 (Legato Notes)",
+        "Clarity": "Exercise 3.4 (Consonant Clarity)",
+        "Breath Support": "Exercise 4.1 (Breath Phrasing)",
+    }
+
+    weakest = min(subscores_dict.items(), key=lambda item: item[1]) if subscores_dict else None
     if weakest and weakest[1] < 70:
         action = action_by_component.get(weakest[0])
         if action:
-            summary["next_time"] = action
+            follow_up = _follow_up_exercises.get(weakest[0], "")
+            follow_up_suffix = f" → Recommended follow-up: {follow_up}." if follow_up else ""
+            summary["next_time"] = (
+                f"{weakest[0]}: {weakest[1]}/100. {action}{follow_up_suffix}"
+            )
 
     return summary
 

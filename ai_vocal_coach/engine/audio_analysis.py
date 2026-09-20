@@ -76,6 +76,30 @@ EDGE_IGNORE_SECONDS = 0.20
 # Number of feedback messages returned to the UI.
 MAX_FEEDBACK_ITEMS = 8
 
+# These exercises deliberately change notes. Analyze the steadiness of each
+# landing instead of treating the written melodic motion as pitch drift.
+_PITCH_MOVEMENT_EXPECTED_TYPES = frozenset({
+    "scale",
+    "staccato",
+    "scale_ascending",
+    "scale_descending",
+    "minor_scale",
+    "intervals",
+    "arpeggios",
+    "vowel_ascending",
+    "vowel_modification",
+    "legato_notes",
+    "legato_melody",
+    "breath_phrasing",
+    "melodic_etude",
+    "vocalises",
+})
+
+
+def pitch_movement_expected(exercise_type):
+    """Whether changing notes is part of the exercise's written task."""
+    return exercise_type in _PITCH_MOVEMENT_EXPECTED_TYPES
+
 
 # ---------------------------------------------------------------------------
 # Audio loading
@@ -1679,10 +1703,10 @@ def _subscores(
         rms
     )
 
-    scale_exercise = exercise_type == "scale_ascending"
+    moving_pitch_exercise = pitch_movement_expected(exercise_type)
     ps = (
         _scale_pitch_stability(f0)
-        if scale_exercise
+        if moving_pitch_exercise
         else _pitch_stability(f0)
     )
 
@@ -2290,31 +2314,49 @@ def _generate_feedback(
         # Pitch feedback
         # --------------------------------------------------------------
 
-        scale_exercise = exercise_type == "scale_ascending"
+        moving_pitch_exercise = pitch_movement_expected(exercise_type)
         window_number = start // window_frames
-        if scale_exercise:
+        if moving_pitch_exercise:
             high_pitch_messages = (
-                "The note transition is clear, but the landing is wavering — hold each scale step steady before moving on",
-                "You reached the next pitch, but it is still unsettled — give each step a steady centre",
+                "The note transition is clear, but the landing is wavering — hold each note steady before moving on",
+                "You reached the next pitch, but it is still unsettled — give the note a steady centre",
+                "The jump landed in the right area, but the pitch kept searching — lock it in sooner",
+                "Good direction on the move, but the arrival needs to settle faster",
             )
             moderate_pitch_messages = (
                 "This note is slightly unsettled — let it arrive, then keep the pitch steady",
-                "The pitch is close here — stay with the note for a moment before the next step",
+                "The pitch is close here — stay with the note for a moment before the next change",
+                "Almost locked in — a tiny bit of wobble is keeping this note from being solid",
+                "The landing is close but not quite centred — commit to the pitch right away",
             )
-            steady_pitch_messages = ("Scale step is steady", "This step is landing cleanly")
+            steady_pitch_messages = (
+                "This note is steady",
+                "This landing is clean",
+                "Solid pitch on this note",
+                "Nicely centred here",
+            )
         else:
             high_pitch_messages = (
-                "Pitch is moving quite a bit — try to settle on the target note",
-                "The sustained pitch is wandering — return gently to the centre of the note",
+                "The sustained pitch is wandering — keep your breath pressure constant to hold the centre",
+                "Pitch is drifting away from the target — make a small correction early rather than late",
+                "The note started well but is losing its centre — maintain steady airflow",
+                "Noticeable pitch movement here — focus on locking in one frequency and staying there",
             )
             moderate_pitch_messages = (
                 "Some pitch drift here — try to hold the target more steadily",
                 "The note is nearly centred — make a small correction and stay there",
+                "A slight waver — keep your breath even and the pitch will follow",
+                "Close to the target, but there is a small drift to correct",
             )
-            steady_pitch_messages = ("Pitch is steady here", "The pitch is holding well")
+            steady_pitch_messages = (
+                "Pitch is steady here",
+                "The pitch is holding well",
+                "Good control — the note is centred",
+                "Steady and on target",
+            )
         pitch_error = (
             _window_step_pitch_quality(segment_f0)
-            if scale_exercise
+            if moving_pitch_exercise
             else _window_pitch_quality(segment_f0)
         )
 
@@ -2707,11 +2749,22 @@ def _generate_feedback(
             "message": chosen["message"] if chosen else default_message,
         })
 
-    result = per_second
+    # Strip seconds that only have the generic neutral filler; keep real signals.
+    meaningful = [item for item in per_second if item["message"] != default_message]
 
-    return result[
-        :max(MAX_FEEDBACK_ITEMS, len(per_second))
-    ]
+    if len(meaningful) >= 2:
+        # Drop adjacent duplicates so the same phrase never repeats back-to-back.
+        result = []
+        last_msg = None
+        for item in meaningful:
+            if item["message"] != last_msg:
+                result.append(item)
+                last_msg = item["message"]
+    else:
+        # Almost nothing detected — return the first few items so the UI isn't empty.
+        result = per_second[:3]
+
+    return result[:MAX_FEEDBACK_ITEMS]
 
 
 # ---------------------------------------------------------------------------

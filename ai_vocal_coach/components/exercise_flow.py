@@ -147,6 +147,92 @@ def render_introduction_stage(exercise_info):
         st.rerun()
 
 
+_RECORDING_FOCUS = {
+    "scale_ascending":    "Direct attack on every note — no scooping. Top 'do' as clear as the first.",
+    "scale_descending":   "Keep breath support up throughout the descent — don't let it sag.",
+    "minor_scale":        "Keep minor 3rd and 7th in place — don't sharpen toward major.",
+    "intervals":          "Hear the target note in your head before the leap, then attack directly.",
+    "arpeggios":          "Let the voice lighten toward the top — don't force chest voice past the break.",
+    "pitch_stability":    "Set pitch immediately; hold breath pressure constant for the full 6–8 s.",
+    "vowel_sustain":      "Fix mouth shape before the note — identical at start, middle, and end.",
+    "vowel_ascending":    "Fix jaw and tongue on note 1; do not let the shape change as pitch rises.",
+    "vowel_modification": "Open 'ah' toward 'aw' at the break — subtle, gradual, never a full swap.",
+    "consonant_clarity":  "Consonant quick, vowel pure — the 5th repetition as crisp as the 1st.",
+    "tongue_tension":     "Tongue tip rests against lower teeth — no gripping at the back.",
+    "diction_challenge":  "Word-ending consonants ('l', 'n') must be as clear when sung as when spoken.",
+    "legato_notes":       "No click, gap, or re-attack — one continuous airstream through do-re-mi.",
+    "legato_melody":      "One sustained idea that changes pitch, not five separate attempts.",
+    "breath_phrasing":    "Breath at bar-end only — never mid-bar.",
+    "melodic_etude":      "Final note as supported and clear as the very first.",
+    "vocalises":          "Continuous airflow through both leaps — resist re-attacking each note.",
+    "scale":              "Pitch changes are expected — focus on landing each step cleanly.",
+    "staccato":           "Staccato = clear silence between notes; legato = one unbroken line.",
+    "legato":             "Airflow continuous between notes — no gaps or re-attacks.",
+    "range_finder":       "Start in your middle voice, then step up and down to find your edges.",
+    "smooth_onset":       "Start each note cleanly — no breathy lead-in or hard glottal attack.",
+}
+
+_RECORDING_TARGET = {
+    "scale_ascending":    "do · re · mi · fa · sol · la · ti · do (8 ascending notes, one per beat)",
+    "scale_descending":   "do · ti · la · sol · fa · mi · re · do (8 descending, one per beat)",
+    "minor_scale":        "la · ti · do · re · mi · fa · sol · la (natural minor, one per beat)",
+    "intervals":          "Low note → leap to high note (direct attack, no slide)",
+    "arpeggios":          "do · mi · sol · do · sol · mi · do (triad arpeggio, one per beat)",
+    "pitch_stability":    "Single note sustained for 6–8 seconds",
+    "vowel_sustain":      "A (ah) · E (eh) · I (ee) · O (oh) · U (oo) — 3–4 s per vowel",
+    "vowel_ascending":    "do · re · mi · fa · sol on 'ah' — ascending, one per beat",
+    "vowel_modification": "do · re · mi · fa · sol — ascending through the passaggio",
+    "consonant_clarity":  "Na × 5 · Ma × 5 · La × 5 · Ra × 5 at steady moderate tempo",
+    "tongue_tension":     "'ah' 5 s · 'ee' 5 s · 'oo' 5 s — three vowel rounds",
+    "diction_challenge":  "Speak phrase · then sing sol · fa · mi · re · do on the same phrase",
+    "legato_notes":       "do · re · mi on 'ah' — 3 connected notes, one breath",
+    "legato_melody":      "do · re · mi · re · do on 'ah' — 5 notes with a volume arc",
+    "breath_phrasing":    "4-bar melody (bars 1–2 + bars 3–4) in one or at most two breaths",
+    "melodic_etude":      "8-bar étude: bars 1–4 (one breath), bars 5–8 (second breath)",
+    "vocalises":          "do · mi · sol · mi · do on 'ah' or 'oo' — one breath",
+    "scale":              "do · re · mi · fa · sol · fa · mi · re · do, one per beat",
+    "staccato":           "do · re · mi · fa · sol (staccato), then same notes legato",
+    "legato":             "do · re · mi · re · do on 'oo' — connected in one breath",
+}
+
+
+def _render_compact_recording_cues(exercise_type, exercise_info, detailed_instructions):
+    """Compact pre-recording reminder card: pattern + 3 key cues + focus item."""
+    target = _RECORDING_TARGET.get(exercise_type)
+    focus = _RECORDING_FOCUS.get(exercise_type, "Follow the exercise instructions.")
+
+    # Skip table rows (lines beginning with "|"); take the last 3 actionable cues
+    non_table = [i for i in detailed_instructions if not i.strip().startswith("|")]
+    key_cues = non_table[-3:]
+
+    st.markdown("**Before you record**")
+
+    if target:
+        st.markdown(
+            f'<p style="font-size:0.85rem;color:var(--text-muted,#6B6560);margin:0 0 0.5rem 0">'
+            f'<strong>Pattern:</strong> {target}</p>',
+            unsafe_allow_html=True,
+        )
+
+    if key_cues:
+        cue_lines = "".join(f"<li style='margin-bottom:0.3rem'>{c}</li>" for c in key_cues)
+        st.markdown(
+            f'<ul style="margin:0 0 0.5rem 1.1rem;padding:0;font-size:0.9rem">{cue_lines}</ul>',
+            unsafe_allow_html=True,
+        )
+
+    st.info(f"**Focus:** {focus}")
+
+    with st.expander("View all instructions", expanded=False):
+        for idx, instruction in enumerate(detailed_instructions, 1):
+            if not instruction.strip().startswith("|"):
+                st.markdown(f"**{idx}.** {instruction}")
+        # Render any embedded table rows together
+        table_rows = [r for r in detailed_instructions if r.strip().startswith("|")]
+        if table_rows:
+            st.markdown("\n".join(table_rows))
+
+
 def render_recording_stage(exercise_id, breathing_type="support"):
     from components.breathing_guide import render_breathing_guide
     from components.exercise_guides import render_exercise_guide
@@ -175,43 +261,34 @@ def render_recording_stage(exercise_id, breathing_type="support"):
     if exercise_type in {"warm_up", "breath_support", "silent_breath"}:
         render_breathing_guide(exercise_type)
     else:
-        render_exercise_guide(exercise_type)
         from utils.pages_config import get_page_info
+        from utils.detailed_instructions import get_detailed_instructions
         exercise_info = get_page_info(exercise_id) or {}
-        instructions = exercise_info.get("instructions", [])
-        if instructions and is_major_scale_ascending:
-            with st.expander("Keep the preparation instructions open", expanded=True):
-                for number, instruction in enumerate(instructions, 1):
-                    st.markdown(f"**{number}.** {instruction}")
-        guidance = {
-            "range_finder": (
-                "Sing one comfortable note, then step upward and downward. "
-                "Stop at the highest and lowest notes you can sing comfortably."
-            ),
-            "smooth_onset": (
-                "Sing five light 'la' or 'ma' notes on one pitch. "
-                "Start each note cleanly without a breathy or harsh attack."
-            ),
-            "legato": (
-                "Sing do-re-mi-re-do on 'oo' as one connected phrase. "
-                "Keep the airflow moving between notes."
-            ),
-            "scale": (
-                "Sing the exercise's written scale pattern. Pitch changes are expected; focus on landing each step cleanly and keeping each note steady."
-            ),
-            "staccato": (
-                "First sing do-do-do as short, separated notes. Then repeat "
-                "the pattern smoothly connected, noticing the contrast."
-            ),
-        }
-        st.markdown("**Your focus**")
-        st.info(guidance.get(exercise_type, "Follow the exercise instructions while recording."))
-        if exercise_type == "staccato":
-            with st.expander("What do staccato and legato mean?"):
-                st.markdown(
-                    "**Staccato** means short, separated notes. "
-                    "**Legato** means smooth, connected notes."
-                )
+        detailed = get_detailed_instructions(exercise_id)
+
+        if detailed:
+            # Compact cue card: pattern + 3 key reminders + focused tip
+            _render_compact_recording_cues(exercise_type, exercise_info, detailed)
+        else:
+            # Fall back to animated guide + instructions for exercises without detailed content
+            render_exercise_guide(exercise_type)
+            fallback_instructions = exercise_info.get("instructions", [])
+            if fallback_instructions:
+                with st.expander("Exercise instructions", expanded=False):
+                    for number, instruction in enumerate(fallback_instructions, 1):
+                        st.markdown(f"**{number}.** {instruction}")
+            fallback_focus = _RECORDING_FOCUS.get(
+                exercise_type,
+                "Follow the exercise instructions while recording.",
+            )
+            st.markdown("**Your focus**")
+            st.info(fallback_focus)
+            if exercise_type == "staccato":
+                with st.expander("What do staccato and legato mean?"):
+                    st.markdown(
+                        "**Staccato** means short, separated notes. "
+                        "**Legato** means smooth, connected notes."
+                    )
 
     # Exhalation reference audio (exercise-specific, e.g. 0.1)
     from utils.pages_config import get_page_info
@@ -236,20 +313,63 @@ def render_recording_stage(exercise_id, breathing_type="support"):
 
     st.divider()
 
+    _BEAT_SENSITIVE_TYPES = {
+        "scale_ascending", "scale_descending", "minor_scale", "intervals", "arpeggios",
+        "scale", "staccato", "legato", "smooth_onset", "vowel_ascending",
+        "vowel_modification", "legato_notes", "legato_melody", "breath_phrasing",
+        "melodic_etude", "vocalises",
+    }
+    needs_count_in = exercise_type in _BEAT_SENSITIVE_TYPES
+
+    import time as _time
+
+    # --- 3-2-1 countdown state machine ---
+    countdown_key = f"countdown_active_{exercise_id}"
+    ready_key = f"recording_ready_{exercise_id}"
+
     st.markdown("**Record your attempt**")
-    if is_major_scale_ascending:
-        st.caption("Use the count-in to settle your pace, then press the microphone button. Press stop when you're done.")
-        if st.button("Start 4-beat count-in", key=f"count_in_{exercise_id}"):
-            st.session_state[f"count_in_ready_{exercise_id}"] = True
+
+    if not st.session_state.get(ready_key):
+        # Show "Get ready" button which triggers the countdown
+        btn_label = "Start count-in & record" if needs_count_in else "Get ready (3-2-1)"
+        if st.button(btn_label, key=f"start_countdown_{exercise_id}", use_container_width=True):
+            st.session_state[countdown_key] = True
             st.rerun()
 
+        if st.session_state.get(countdown_key):
+            # Visual 3-2-1 countdown
+            _cd_slot = st.empty()
+            for _n in (3, 2, 1):
+                _cd_slot.markdown(
+                    f'<div style="text-align:center;font-size:4rem;font-weight:700;'
+                    f'padding:1rem 0;color:var(--primary-color,#0f766e)">{_n}</div>',
+                    unsafe_allow_html=True,
+                )
+                _time.sleep(1)
+            _cd_slot.empty()
+            st.session_state[countdown_key] = False
+            st.session_state[ready_key] = True
+            st.rerun()
+
+        col_cancel, _ = st.columns([1, 3])
+        with col_cancel:
+            if st.button("Cancel", key="rec_cancel"):
+                reset_exercise_flow()
+                st.rerun()
+        return None
+
+    # Countdown done — show recording UI
+    if needs_count_in:
         if st.session_state.get(f"count_in_ready_{exercise_id}"):
             st.markdown(
                 '<div class="count-in" role="status"><strong>Count-in ready</strong> · 1 · 2 · 3 · 4</div>',
                 unsafe_allow_html=True,
             )
-            st.audio(generate_click_track(bpm=60, bars=8, beats_per_bar=4), format="audio/wav")
-            st.caption("The first four beats are your count-in. Leave this metronome playing while you record to keep a steady pulse.")
+        st.audio(generate_click_track(bpm=60, bars=8, beats_per_bar=4), format="audio/wav")
+        st.caption(
+            "Count-in is playing. Press the microphone button to start recording. "
+            "Use headphones so the click is not captured in the analysis."
+        )
     else:
         st.caption("Press the microphone button below to record. Press stop when you're done.")
 
@@ -273,6 +393,7 @@ def render_recording_stage(exercise_id, breathing_type="support"):
                 st.session_state.noise_warning_shown = False
                 st.session_state.noise_continue = False
                 st.session_state.exercise_analysis = None
+                st.session_state[f"recording_ready_{exercise_id}"] = False
                 st.rerun()
         with col2:
             if st.button("Submit recording", use_container_width=True, key="rec_submit"):
@@ -389,7 +510,20 @@ def _render_pitch_target_chart(analysis, exercise_id):
 
     from engine.audio_analysis import exercise_type_from_id
 
-    patterns = {"scale_ascending": [0, 2, 4, 5, 7, 9, 11, 12]}
+    patterns = {
+        "scale_ascending":  [0, 2, 4, 5, 7, 9, 11, 12],
+        "scale_descending": [12, 11, 9, 7, 5, 4, 2, 0],
+        "minor_scale":      [0, 2, 3, 5, 7, 8, 10, 12],
+        "arpeggios":        [0, 4, 7, 12, 7, 4, 0],
+        "intervals":        [0, 7],
+        "legato_notes":     [0, 2, 4, 2, 0],
+        "legato_melody":    [0, 2, 4, 5, 7, 5, 4, 2, 0],
+        "vowel_ascending":  [0, 2, 4, 5, 7],
+        "scale":            [0, 2, 4, 5, 7],
+        "melodic_etude":    [0, 2, 4, 5, 7, 9, 11, 12, 11, 9, 7, 5, 4, 2, 0],
+        "vocalises":        [0, 4, 7, 4, 0],
+        "breath_phrasing":  [0, 2, 4, 5, 7, 9, 7, 5, 4, 2, 0],
+    }
     pattern = patterns.get(exercise_type_from_id(exercise_id))
     if not pattern:
         return
@@ -528,6 +662,9 @@ def render_results_stage(exercise_id, next_page):
         for col, (dim, val) in zip(cols, subscores.items()):
             col.metric(dim, f"{val}/100")
 
+    from engine.audio_analysis import exercise_type_from_id
+    exercise_type = exercise_type_from_id(exercise_id)
+
     # Recorded audio playback
     recorded = st.session_state.get("recorded_audio")
     rec_duration = None
@@ -536,7 +673,12 @@ def render_results_stage(exercise_id, next_page):
         st.audio(recorded, format="audio/wav")
         rec_duration = _recording_duration_seconds(recorded)
 
-        if exercise_type == "scale_ascending":
+        _CHART_TYPES = {
+            "scale_ascending", "scale_descending", "minor_scale", "arpeggios",
+            "intervals", "legato_notes", "legato_melody", "vowel_ascending",
+            "scale", "melodic_etude", "vocalises", "breath_phrasing",
+        }
+        if exercise_type in _CHART_TYPES:
             _render_pitch_target_chart(analysis, exercise_id)
 
     st.divider()
@@ -563,30 +705,65 @@ def render_results_stage(exercise_id, next_page):
 
     if feedback_list:
         st.markdown("**Feedback**")
-        items_html = ""
-        for item in feedback_list:
-            if isinstance(item, dict):
-                time_code = item.get("time", "")
-                message   = item.get("message", "")
-                items_html += f"""
-                <div class="feedback-item">
-                    <span class="feedback-timestamp">{time_code}</span>
-                    <span class="feedback-text">{message}</span>
-                </div>"""
+
+        # Group repeated messages — collect all timestamps per normalised message text.
+        import re as _re
+        _grouped: dict = {}  # normalised_msg -> {"display": str, "times": list[str]}
+        _ungrouped = []      # items that have no timestamp (plain strings)
+        for _item in feedback_list:
+            if isinstance(_item, dict):
+                _msg = _item.get("message", "")
+                _t   = _item.get("time", "")
+                _key = _re.sub(r'\s+', ' ', _msg.strip().lower())
+                if _key:
+                    if _key not in _grouped:
+                        _grouped[_key] = {"display": _msg.strip(), "times": []}
+                    if _t:
+                        _grouped[_key]["times"].append(_t)
             else:
-                items_html += f'<div class="feedback-item"><span class="feedback-text">{item}</span></div>'
+                _ungrouped.append(str(_item))
+
+        items_html = ""
+        for _entry in _grouped.values():
+            _disp = _entry["display"]
+            _times = _entry["times"]
+            if len(_times) > 1:
+                _ts_str = " · ".join(
+                    f'<span class="feedback-timestamp">{_t}</span>' for _t in _times
+                )
+                items_html += (
+                    f'<div class="feedback-item">'
+                    f'<span class="feedback-text">{_disp}</span>'
+                    f'<div style="margin-top:0.2rem;font-size:0.8rem">{_ts_str}</div>'
+                    f'</div>'
+                )
+            elif _times:
+                items_html += (
+                    f'<div class="feedback-item">'
+                    f'<span class="feedback-timestamp">{_times[0]}</span>'
+                    f'<span class="feedback-text">{_disp}</span>'
+                    f'</div>'
+                )
+            else:
+                items_html += (
+                    f'<div class="feedback-item">'
+                    f'<span class="feedback-text">{_disp}</span>'
+                    f'</div>'
+                )
+        for _s in _ungrouped:
+            items_html += f'<div class="feedback-item"><span class="feedback-text">{_s}</span></div>'
+
         st.markdown(items_html, unsafe_allow_html=True)
 
     st.divider()
 
     # Coaching summary
     from engine.coaching import generate_coaching_summary
-    from engine.audio_analysis import exercise_type_from_id
     summary       = generate_coaching_summary(
         score,
         feedback_list,
         subscores,
-        exercise_type=exercise_type_from_id(exercise_id),
+        exercise_type=exercise_type,
     )
     what_went_well = summary.get("what_went_well", [])
     work_on        = summary.get("work_on", [])
