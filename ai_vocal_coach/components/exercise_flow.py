@@ -531,12 +531,14 @@ def _render_pitch_target_chart(analysis, exercise_id):
     try:
         import plotly.graph_objects as go
 
-        pitch_data = analysis["pitch_data"]
+        pitch_data = analysis.get("pitch_data")
+        if not isinstance(pitch_data, dict):
+            return
+
         times = np.asarray(pitch_data.get("times", []), dtype=float)
-        f0 = np.asarray(
-            [value if value is not None else np.nan for value in pitch_data.get("f0", [])],
-            dtype=float,
-        )
+        f0 = np.asarray(pitch_data.get("f0", []), dtype=float)
+        if times.ndim != 1 or f0.ndim != 1 or len(times) != len(f0):
+            return
         valid = np.isfinite(times) & np.isfinite(f0) & (f0 > 0)
         if np.sum(valid) < 6:
             return
