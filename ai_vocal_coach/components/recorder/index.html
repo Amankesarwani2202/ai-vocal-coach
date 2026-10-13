@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{margin:0;font:15px system-ui,sans-serif;color:#292524;background:#faf7f1}
+.card{padding:16px;border:1px solid #d6c8b9;border-radius:12px}
+button{font:inherit;font-weight:600;cursor:pointer;background:#92400e;color:white;border:0;border-radius:8px;padding:10px 16px;margin:0 8px 8px 0}
+button:disabled{opacity:.5;cursor:default}#cue{padding:10px 0;min-height:28px;line-height:1.5}#clock{font-variant-numeric:tabular-nums;font-size:24px;font-weight:600}.good{color:#166534}.attention{color:#9f1239}small{display:block;color:#57534e;line-height:1.5}meter{width:100%;height:18px}
+</style>
+<div class="card">
+  <button id="start" type="button">Start recording</button><button id="stop" type="button" disabled>Stop</button>
+  <span id="clock">0:00</span><meter id="level" min="0" max="1" value="0" aria-label="Microphone level"></meter>
+  <div id="cue" role="status" aria-live="polite">Ready. Your microphone turns on when you press Start.</div>
+  <small>Use headphones for the click. Live cues are visual; the full coaching appears after you submit.</small>
+</div>
+<script>
+(() => {
+  let profile={},reference=null,context=null,stream=null,processor=null,source=null,analyser=null,muted=null;
+  let chunks=[],frames=0,captureStart=0,beatZero=null,ticker=null,scheduler=null,nextClick=0,clickNumber=0;
+  let running=false,firstPitch=null,startedAt=null,previousRms=0,lastAttack=-1,formantBaseline=null,lastVowel=-1;
+  const start=document.getElementById('start'),stop=document.getElementById('stop'),cue=document.getElementById('cue');
+  const send=(type,payload={})=>parent.postMessage({isStreamlitMessage:true,type,...payload},'*');
+  function message(text,kind=''){if(cue.textContent!==text){cue.textContent=text;cue.className=kind;}}
+  function pitch(samples,sr){
+    const ds=2,n=Math.min(1024,Math.floor(samples.length/ds)),a=new Float32Array(n);
+    let mean=0;for(let i=0;i<n;i++){a[i]=samples[i*ds];mean+=a[i];}mean/=n;
+    let energy=0;for(let i=0;i<n;i++){a[i]-=mean;energy+=a[i]*a[i];}if(energy/n<4e-8)return null;
+    const low=Math.floor(sr/ds/1000),high=Math.min(n/2,Math.ceil(sr/ds/65));
+    let best=0,lag=0;
+    for(let k=low;k<high;k++){
+      let sum=0,aa=0,bb=0;for(let i=0;i<n-k;i++){sum+=a[i]*a[i+k];aa+=a[i]*a[i];bb+=a[i+k]*a[i+k];}
+      const corr=sum/Math.sqrt(aa*bb+1e-15);
+      // Choose the first strong local candidate instead of an octave subharmonic.
+      if(corr>best){best=corr;lag=k;}
+      if(best>.93&&corr<best-.02&&lag>low)return sr/ds/lag;
+    }
+    return best>.7&&lag?sr/ds/lag:null;
+  }
+  function formants(samples,sr){
+    // LPC spectral envelope on 8 kHz pre-emphasised data; live comparison only.
+    const stride=Math.max(1,Math.round(sr/8000)),rate=sr/stride,n=Math.min(400,Math.floor(samples.length/stride));
+    if(n<300)return null;
+    const x=new Float64Array(n);for(let i=1;i<n;i++)x[i]=(samples[i*stride]-.97*samples[(i-1)*stride])*(.54-.46*Math.cos(2*Math.PI*i/(n-1)));
+    const order=14,r=new Float64Array(order+1);for(let k=0;k<=order;k++)for(let i=k;i<n;i++)r[k]+=x[i]*x[i-k];
+    if(r[0]<1e-10)return null;let a=[1],err=r[0];
+    for(let k=1;k<=order;k++){
+      let sum=r[k];for(let j=1;j<k;j++)sum+=a[j]*r[k-j];const reflection=-sum/Math.max(err,1e-15);
+      if(Math.abs(reflection)>=.999)return null;
+      const next=a.slice();for(let j=1;j<k;j++)next[j]=a[j]+reflection*a[k-j];next[k]=reflection;a=next;err*=1-reflection*reflection;
+    }
+    const points=[];for(let f=180;f<Math.min(3500,rate*.45);f+=25){let re=0,im=0;for(let j=0;j<a.length;j++){re+=a[j]*Math.cos(2*Math.PI*f*j/rate);im-=a[j]*Math.sin(2*Math.PI*f*j/rate);}points.push([f,1/(re*re+im*im+1e-12)]);}
+    const peaks=[];for(let i=1;i<points.length-1;i++)if(points[i][1]>points[i-1][1]&&points[i][1]>points[i+1][1])peaks.push(points[i]);
+    if(peaks.length<2||peaks[0][0]>1200||peaks[1][0]<650)return null;
+    return [peaks[0][0],peaks[1][0]];
+  }
+  function tick(){
+    if(!running)return;const now=context.currentTime-captureStart;
+    document.getElementById('clock').textContent=Math.floor(now/60)+':'+String(Math.floor(now%60)).padStart(2,'0');
+    const samples=new Float32Array(analyser.fftSize);analyser.getFloatTimeDomainData(samples);
+    let rms=0;for(const s of samples)rms+=s*s;rms=Math.sqrt(rms/samples.length);document.getElementById('level').value=Math.min(1,rms*6);
+    const hz=pitch(samples,context.sampleRate),spb=60/profile.bpm;
+    if(beatZero!==null&&context.currentTime<beatZero){message('Count in: '+Math.max(1,Math.min(4,4-Math.floor((context.currentTime-(beatZero-4*spb))/spb))));previousRms=rms;return;}
+    if(hz&&!firstPitch){firstPitch=hz;startedAt=now;}
+    const elapsed=startedAt===null?0:now-startedAt;
+    if(profile.pitch_model==='rhythm'){
+      if(rms>Math.max(.004,previousRms*1.7)&&now-lastAttack>.13){
+        lastAttack=now;const beat=(context.currentTime-beatZero)/spb;
+        const expected=profile.onset_beats||[];const nearest=expected.reduce((best,b)=>Math.abs(b-beat)<Math.abs(best-beat)?b:best,expected[0]||0);
+        const difference=(beat-nearest)*spb*1000;
+        message(Math.abs(difference)<=60?'Attack lined up with the written beat.':difference<0?'Early — wait for the written beat.':'Late — anticipate the written beat.',Math.abs(difference)<=60?'good':'attention');
+      }
+    }else if(profile.pitch_model==='held'&&hz&&firstPitch){
+      const deviation=1200*Math.log2(hz/(reference||firstPitch));
+      message(Math.abs(deviation)>30?'Pitch is '+(deviation<0?'flat':'sharp')+' — make a small correction.':'Pitch is holding steadily. Keep the airflow even.',Math.abs(deviation)>30?'attention':'good');
+    }else if(profile.pitch_model==='glide'&&hz){message('Glide smoothly; let the tone lighten as you rise.');}
+    else if(profile.pitch_model==='breath'){message(rms>.002?'Keep the exhalation even for eight seconds.':'Begin your gentle exhalation when ready.');}
+    else if(profile.type==='staccato'){
+      message(elapsed<5*spb?'Part 1: short notes with clear silence between them.':'Part 2: connect the same notes without re-attacking.');
+    }else if(!firstPitch){message('Take your breath, then begin. The opening silence is not scored.');}
+    else{message('Follow the written pattern and keep the breath supported.');}
+    if(['vowel_sustain','vowel_ascending','tongue_tension'].includes(profile.type)&&hz){
+      const vowel=Math.floor(elapsed/(profile.round_seconds||100));
+      if(vowel!==lastVowel){formantBaseline=null;lastVowel=vowel;}
+      const current=formants(samples,context.sampleRate);
+      if(current&&!formantBaseline&&elapsed>.4)formantBaseline=current;
+      if(current&&formantBaseline){const change=Math.hypot((current[0]-formantBaseline[0])/150,(current[1]-formantBaseline[1])/300);if(change>1.3)message('The vowel envelope changed — check that the intended mouth shape stays the same.','attention');}
+    }
+    previousRms=rms;
+    if(now>=90)finish();
+  }
+  function schedule(){
+    if(!running)return;
+    while(nextClick<context.currentTime+.12){
+      const oscillator=context.createOscillator(),gain=context.createGain();
+      oscillator.frequency.value=clickNumber%4===0?1100:800;gain.gain.setValueAtTime(.06,nextClick);gain.gain.exponentialRampToValueAtTime(.0001,nextClick+.045);
+      oscillator.connect(gain).connect(context.destination);oscillator.start(nextClick);oscillator.stop(nextClick+.05);
+      nextClick+=60/profile.bpm;clickNumber++;
+    }
+  }
+  function wav(samples,sr){
+    const buffer=new ArrayBuffer(44+samples.length*2),v=new DataView(buffer);const str=(p,s)=>{for(let i=0;i<s.length;i++)v.setUint8(p+i,s.charCodeAt(i));};
+    str(0,'RIFF');v.setUint32(4,36+samples.length*2,true);str(8,'WAVE');str(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);str(36,'data');v.setUint32(40,samples.length*2,true);
+    for(let i=0;i<samples.length;i++)v.setInt16(44+i*2,Math.max(-1,Math.min(1,samples[i]))*32767,true);
+    const bytes=new Uint8Array(buffer);let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(binary);
+  }
+  async function cleanup(){
+    running=false;clearInterval(ticker);clearInterval(scheduler);ticker=scheduler=null;
+    if(processor){processor.onaudioprocess=null;processor.disconnect();}if(source)source.disconnect();if(muted)muted.disconnect();
+    if(stream)stream.getTracks().forEach(track=>track.stop());if(context&&context.state!=='closed')await context.close();
+  }
+  async function finish(){
+    if(!running)return;
+    const rate=context.sampleRate,origin=beatZero===null?null:beatZero-captureStart;
+    const samples=new Float32Array(frames);let offset=0;for(const chunk of chunks){samples.set(chunk,offset);offset+=chunk.length;}
+    await cleanup();stop.disabled=true;start.disabled=false;
+    if(samples.length<rate*.3){message('The recording was too short. Please try again.');return;}
+    message('Recording ready. Submit your attempt below.');
+    send('streamlit:setComponentValue',{value:{wav_base64:wav(samples,rate),performance_start_seconds:origin,recording_id:Date.now()},dataType:'json'});
+    chunks=[];
+  }
+  start.onclick=async()=>{
+    start.disabled=true;
+    try{
+      await cleanup();chunks=[];frames=0;firstPitch=null;startedAt=null;previousRms=0;lastAttack=-1;formantBaseline=null;lastVowel=-1;
+      stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+      context=new (window.AudioContext||window.webkitAudioContext)();await context.resume();
+      source=context.createMediaStreamSource(stream);analyser=context.createAnalyser();analyser.fftSize=4096;source.connect(analyser);
+      processor=context.createScriptProcessor(4096,1,1);muted=context.createGain();muted.gain.value=0;source.connect(processor);processor.connect(muted).connect(context.destination);
+      captureStart=context.currentTime;running=true;
+      processor.onaudioprocess=e=>{if(!running)return;const chunk=new Float32Array(e.inputBuffer.getChannelData(0));chunks.push(chunk);frames+=chunk.length;};
+      beatZero=profile.pitch_model==='rhythm'?context.currentTime+.3+4*60/profile.bpm:null;
+      if(beatZero!==null){nextClick=beatZero-4*60/profile.bpm;clickNumber=0;scheduler=setInterval(schedule,25);schedule();}
+      ticker=setInterval(tick,160);stop.disabled=false;message('Recording. Begin when ready.');
+    }catch(error){await cleanup();start.disabled=false;stop.disabled=true;message('Microphone access was unavailable. Allow microphone access or use the simple microphone below.');}
+  };
+  stop.onclick=finish;
+  window.addEventListener('message',event=>{if(event.data?.type==='streamlit:render'){profile=event.data.args.profile||{};reference=event.data.args.reference_hz||null;send('streamlit:setFrameHeight',{height:225});}});
+  window.addEventListener('pagehide',cleanup);window.addEventListener('beforeunload',cleanup);
+  send('streamlit:componentReady',{apiVersion:1});send('streamlit:setFrameHeight',{height:225});
+})();
+</script>
+</html>

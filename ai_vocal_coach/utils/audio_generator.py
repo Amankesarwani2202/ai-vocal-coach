@@ -16,7 +16,7 @@ def generate_tone(frequency, duration=2.0, sr=16000, volume=0.3):
     return audio
 
 
-def generate_ss_sound(duration=15.0, sr=16000, volume=0.2):
+def generate_ss_sound(duration=8.0, sr=16000, volume=0.2):
     """Generate a steady 'sss' breath sound."""
     t = np.linspace(0, duration, int(sr * duration), False)
     # White noise filtered to simulate 'sss' (high frequency)
@@ -28,6 +28,30 @@ def generate_ss_sound(duration=15.0, sr=16000, volume=0.2):
 
 def generate_exemplar_audio(exercise_id, sr=16000):
     """Generate exemplar audio for an exercise."""
+
+    from utils.exercise_models import curriculum, get_profile, note_grid
+    model = next((p for p in curriculum().values() if p["code"].replace(".", "_") == exercise_id[:3]), None)
+    if model and model.get("notes"):
+        boundaries, offsets = note_grid(model)
+        root_hz = 440 * 2 ** ((model.get("root_midi", 60) - 69) / 12)
+        parts = []
+        for i, offset in enumerate(offsets):
+            duration = boundaries[i + 1] - boundaries[i]
+            note = generate_tone(root_hz * 2 ** (offset / 12), duration, sr)
+            if model["type"] == "staccato" and i < 5:
+                note[int(len(note) * .5):] = 0
+            fade = min(int(.015 * sr), len(note) // 2)
+            if fade:
+                note[:fade] *= np.linspace(0, 1, fade)
+                note[-fade:] *= np.linspace(1, 0, fade)
+            parts.append(note)
+        audio = np.concatenate(parts)
+        if model["code"] == "4.2":
+            phase = np.linspace(0, 1, len(audio))
+            audio *= .45 + .55 * (1 - np.abs(2 * phase - 1))
+        return audio
+    if model and model["pitch_model"] == "breath":
+        return generate_ss_sound(model.get("min_seconds", 8), sr)
 
     if exercise_id == "0_1_warm_up":
         # Warm-up: Three notes on a comfortable pitch
@@ -58,8 +82,8 @@ def generate_exemplar_audio(exercise_id, sr=16000):
         return audio
 
     elif exercise_id == "1_1_diaphragmatic":
-        # Diaphragmatic: Steady 'sss' for 15 seconds
-        audio = generate_ss_sound(15.0, sr, 0.2)
+        # Diaphragmatic: Steady 'sss' for 8 seconds
+        audio = generate_ss_sound(8.0, sr, 0.2)
         return audio
 
     elif exercise_id == "1_2_silent_breath":

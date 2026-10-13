@@ -70,10 +70,11 @@ else:
 
     col1, col2, col3 = st.columns(3)
     col1.metric("XP", f"{st.session_state.xp}")
-    col2.metric("Exercises completed", len(completed))
+    active_completed = sum(item["completed"] for item in progress.values())
+    col2.metric("Exercises completed", active_completed)
     total_exercises = sum(item["total"] for item in progress.values())
-    completion_pct = int((len(completed) / total_exercises * 100) if total_exercises > 0 else 0)
-    col3.metric("Overall", f"{completion_pct}%", f"{len(completed)}/{total_exercises}")
+    completion_pct = int((sum(item["completed"] for item in progress.values()) / total_exercises * 100) if total_exercises > 0 else 0)
+    col3.metric("Overall", f"{completion_pct}%", f"{active_completed}/{total_exercises}")
 
     st.divider()
 
@@ -98,12 +99,11 @@ else:
         level_names = {
             0: "Diagnostics", 1: "Fundamentals", 2: "Pitch & Scales",
             3: "Articulation", 4: "Legato", 5: "Rhythm",
-            6: "Resonance", 7: "Classical Technique", 8: "Repertoire I",
-            9: "Repertoire II",
+            6: "Resonance", 7: "Classical Technique",
         }
-        for row_start in range(0, 10, 2):
+        for row_start in range(0, 8, 2):
             columns = st.columns(2)
-            for column, level in zip(columns, range(row_start, min(row_start + 2, 10))):
+            for column, level in zip(columns, range(row_start, min(row_start + 2, 8))):
                 with column:
                     item = progress[level]
                     st.markdown(f"**Level {level} — {level_names[level]}** &nbsp; {item['completed']}/{item['total']}")
@@ -119,7 +119,7 @@ else:
             style = "" if done else "color:var(--text-muted,#6B6560)"
             return f"<div style='padding:0.2rem 0;font-size:0.88rem;{style}'>{marker} {name}</div>"
 
-        for column, level in zip(level_columns, range(10)):
+        for column, level in zip(level_columns, range(8)):
             with column:
                 pages = get_pages_by_level(level)
                 st.markdown(f"<div class='section-label'>Level {level} · {level_names[level]}</div>", unsafe_allow_html=True)
@@ -137,8 +137,8 @@ else:
             st.markdown(f"**Continue Level 1** — you've completed {progress[1]['completed']} of {progress[1]['total']} exercises.")
         elif placement_level >= 2 and progress[2]["percentage"] < 100:
             st.markdown("**Level 2 is unlocked.** Work on your pitch and scales to keep improving.")
-        elif next((level for level in range(3, 10) if progress[level]["percentage"] < 100), None) is not None:
-            next_level = next(level for level in range(3, 10) if progress[level]["percentage"] < 100)
+        elif next((level for level in range(3, 8) if progress[level]["percentage"] < 100), None) is not None:
+            next_level = next(level for level in range(3, 8) if progress[level]["percentage"] < 100)
             st.markdown(f"**Continue Level {next_level}** — keep building your technique and musicality.")
         else:
             st.markdown("All exercises complete. Keep practising to improve your scores.")

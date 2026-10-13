@@ -42,7 +42,7 @@ def render_enhanced_sidebar():
 
             level_select = st.selectbox(
                 "Level",
-                options=[(f"Level {level} — {get_level_badge(level)}", level) for level in range(10)],
+                options=[(f"Level {level} — {get_level_badge(level)}", level) for level in range(8)],
                 format_func=lambda x: x[0],
                 key="sidebar_level_select",
                 label_visibility="collapsed",
@@ -90,7 +90,7 @@ def render_enhanced_sidebar():
 
         with st.expander("About"):
             st.markdown("""
-            **AI Vocal Coach** — ten levels:
+            **AI Vocal Coach** — eight levels:
 
             **Level 0** — Diagnostics (3 exercises)
             Assess your baseline and build a vocal profile.
@@ -101,7 +101,7 @@ def render_enhanced_sidebar():
             **Level 2** — Pitch & Scales (6 exercises)
             Scales, intervals, arpeggios, stability.
 
-            **Levels 3–9** — Articulation, resonance, classical technique, and repertoire.
+            **Levels 3–7** — Articulation, resonance, and classical technique.
             """)
 
 

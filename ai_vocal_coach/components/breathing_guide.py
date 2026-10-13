@@ -21,19 +21,19 @@ def render_breathing_guide(exercise_type="warm_up"):
          text-transform: uppercase; margin-bottom: 10px; height: 20px; }
   .timer { font-size: 11px; color: #6B6560; margin-top: 6px; }
 
-  .ribs { transform-origin: 90px 130px; animation: ribs 19s ease-in-out infinite; }
-  .belly { transform-origin: 90px 175px; animation: belly 19s ease-in-out infinite; }
+  .ribs { transform-origin: 90px 130px; animation: ribs __TOTAL__s ease-in-out infinite; }
+  .belly { transform-origin: 90px 175px; animation: belly __TOTAL__s ease-in-out infinite; }
 
   @keyframes ribs {
     0%   { transform: scaleX(1); }
-    20%  { transform: scaleX(1.18); }
-    26%  { transform: scaleX(1.18); }
+    __INHALE__% { transform: scaleX(1.18); }
+    __HOLD__% { transform: scaleX(1.18); }
     100% { transform: scaleX(1); }
   }
   @keyframes belly {
     0%   { transform: scaleY(1); }
-    20%  { transform: scaleY(1.12); }
-    26%  { transform: scaleY(1.12); }
+    __INHALE__% { transform: scaleY(1.12); }
+    __HOLD__% { transform: scaleY(1.12); }
     100% { transform: scaleY(1); }
   }
 </style>
@@ -62,14 +62,14 @@ def render_breathing_guide(exercise_type="warm_up"):
     <text x="155" y="136" font-size="8.5" fill="#B45309" font-family="Inter, sans-serif">outward</text>
   </svg>
 
-  <div class="timer" id="timer">4s inhale &rarr; 15s exhale</div>
+  <div class="timer" id="timer">4s inhale &rarr; 8s exhale</div>
 </div>
 
 <script>
 (function() {
   var cue = document.getElementById('cue');
   var timer = document.getElementById('timer');
-  var INHALE = 4, HOLD = 2, TOTAL = 19, SILENT = __SILENT__;
+  var INHALE = 4, HOLD = 2, TOTAL = __TOTAL__, SILENT = __SILENT__;
   var start = Date.now();
   function tick() {
     var elapsed = ((Date.now() - start) / 1000) % TOTAL;
@@ -95,6 +95,9 @@ def render_breathing_guide(exercise_type="warm_up"):
 </html>
 """
 
+    html = html.replace("__TOTAL__", "10" if exercise_type == "silent_breath" else "12")
+    html = html.replace("__INHALE__", "40" if exercise_type == "silent_breath" else "33.333")
+    html = html.replace("__HOLD__", "60" if exercise_type == "silent_breath" else "33.334")
     html = html.replace("__SILENT__", str(exercise_type == "silent_breath").lower())
 
     components.html(html, height=340, scrolling=False)
@@ -103,7 +106,7 @@ def render_breathing_guide(exercise_type="warm_up"):
         st.markdown("""
 - Inhale through your mouth — feel your lower ribs expand outward, not upward
 - Keep shoulders completely still
-- Exhale with a soft steady "sss" for 15 seconds
+- Exhale with a soft steady "sss" for 8 seconds
         """)
     elif exercise_type == "silent_breath":
         st.markdown("""

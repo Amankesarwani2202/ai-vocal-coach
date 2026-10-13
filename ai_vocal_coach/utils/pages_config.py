@@ -31,7 +31,7 @@ PAGES_MANIFEST = {
             "Stand or sit comfortably with good posture",
             "Inhale through your mouth for 4 seconds",
             "Keep your shoulders relaxed and still",
-            "Release a soft 'sss' sound for 15 seconds",
+            "Release a soft 'sss' sound for 8 seconds",
             "Try to keep your airflow steady and smooth",
         ],
         "exhalation_asset": "assets/examples/0_1_exhalation.wav",
@@ -85,7 +85,7 @@ PAGES_MANIFEST = {
             "Stand comfortably with feet shoulder-width apart",
             "Inhale quietly through your nose for 4 seconds",
             "Feel your lower ribs expand outward (not your chest)",
-            "Exhale with a steady 'sss' sound for 15+ seconds",
+            "Exhale with a steady 'sss' sound for 8 seconds",
             "Focus on smooth, consistent airflow",
         ],
     },
@@ -155,10 +155,10 @@ PAGES_MANIFEST = {
         "prerequisites": ["1.4"],
         "instructions": [
             "Breathe in low, expanding your stomach with a diaphragmatic breath",
-            "Sing do-re-mi-fa-sol-fa-mi-re-do on 'ah', one note per beat, in one breath",
+            "Sing the supplied five-note pattern do-re-mi-re-do on 'ah', one note per beat, in one breath",
             "Match each pitch to the reference tones you hear",
             "Keep the tone and rhythm steady across the full phrase",
-            "Hold the final 'do' until you are out of breath, without forcing the release",
+            "Release the final 'do' cleanly after its written beat, without forcing the release",
         ],
     },
     "8_Exercise_1.6_Staccato_vs_Legato": {
@@ -230,7 +230,7 @@ PAGES_MANIFEST = {
         "prerequisites": ["2.1"],
         "instructions": [
             "Take a full diaphragmatic breath before starting",
-            "Sing the natural minor scale ascending and descending: la-ti-do-re-mi-fa-sol-la, one note per beat",
+            "Sing the natural minor scale ascending: la-ti-do-re-mi-fa-sol-la, one note per beat",
             "Notice the close half-steps between ti-do and mi-fa",
             "Keep the minor third and seventh in their natural minor places; do not sharpen them toward major",
             "Keep breath support even and finish by matching the starting 'la' pitch",
@@ -268,7 +268,7 @@ PAGES_MANIFEST = {
         "prerequisites": ["2.4"],
         "instructions": [
             "Take a full diaphragmatic breath before starting",
-            "Sing do-mi-sol-do-sol-mi-do, one note per beat, as a major triad arpeggio",
+            "Sing do-mi-sol-do-sol-mi-do; hold the high do for two beats and every other note for one beat",
             "Anticipate the register shift and let the voice lighten toward the high 'do' instead of forcing chest voice",
             "Keep airflow continuous through every leap, with no gasping or reset",
             "Match volume and tone color across the notes, then make the return transition smooth as you descend",
@@ -670,55 +670,48 @@ PAGES_MANIFEST = {
     },
 
     # ── Levels 8-9: Repertoire ─────────────────────────────────────────────
-    "40_Exercise_8.1_Caro_Mio_Ben": {
-        "level": 8, "category": "Repertoire I", "title": "8.1 Caro mio ben Phrases",
-        "description": "Apply technique to short Italian art-song phrases", "order": 42,
-        "skills": ["Repertoire", "Italian Diction", "Phrasing"], "difficulty": "Advanced", "duration_minutes": 20,
-        "prerequisites": ["Level 7"], "instructions": ["Speak the phrase clearly first", "Sing the short phrase on the text", "Keep the legato line connected", "Plan the breath at the phrase end", "Repeat with expressive but relaxed tone"],
-    },
-    "41_Exercise_8.2_Amarilli_Mia_Bella": {
-        "level": 8, "category": "Repertoire I", "title": "8.2 Amarilli mia bella Exercise",
-        "description": "Build phrase shape and diction in an Italian song excerpt", "order": 43,
-        "skills": ["Repertoire", "Diction", "Expression"], "difficulty": "Advanced", "duration_minutes": 20,
-        "prerequisites": ["8.1"], "instructions": ["Speak the text in rhythm", "Mark the important words", "Sing the excerpt with connected vowels", "Keep consonants light and clear", "Shape the phrase toward its peak"],
-    },
-    "42_Exercise_8.3_Folk_Song_Settings": {
-        "level": 8, "category": "Repertoire I", "title": "8.3 Folk Song Settings",
-        "description": "Carry classical technique into a simple folk melody", "order": 44,
-        "skills": ["Musicality", "Phrasing", "Tone"], "difficulty": "Intermediate", "duration_minutes": 15,
-        "prerequisites": ["8.2"], "instructions": ["Listen for the melody shape", "Sing the tune simply and clearly", "Keep the vowel consistent", "Use a natural expressive dynamic", "Take breaths only at musical commas"],
-    },
-    "43_Exercise_8.4_Italian_Art_Song": {
-        "level": 8, "category": "Repertoire I", "title": "8.4 Italian Art Song Segments",
-        "description": "Combine diction, breath, resonance, and legato in short segments", "order": 45,
-        "skills": ["Repertoire", "Legato", "Diction", "Expression"], "difficulty": "Advanced", "duration_minutes": 20,
-        "prerequisites": ["8.3"], "instructions": ["Speak the segment before singing", "Identify the phrase boundary", "Sing with clear Italian vowels", "Keep the line supported through the final word", "Repeat with a more intentional phrase shape"],
-    },
-    "44_Exercise_9.1_Italian_Art_Songs": {
-        "level": 9, "category": "Repertoire II", "title": "9.1 Complete Italian Art Songs",
-        "description": "Perform a complete Italian song with sustained technique", "order": 46,
-        "skills": ["Full Performance", "Italian Diction", "Stamina"], "difficulty": "Advanced", "duration_minutes": 30,
-        "prerequisites": ["Level 8"], "instructions": ["Review the text and translation", "Mark your planned breaths", "Sing the complete song", "Keep technique consistent across sections", "Review the recording and choose one focus"],
-    },
-    "45_Exercise_9.2_German_Lieder": {
-        "level": 9, "category": "Repertoire II", "title": "9.2 Simple German Lieder",
-        "description": "Explore clear German diction within a sustained vocal line", "order": 47,
-        "skills": ["German Diction", "Repertoire", "Phrasing"], "difficulty": "Advanced", "duration_minutes": 30,
-        "prerequisites": ["9.1"], "instructions": ["Speak the text with clear consonants", "Keep vowels tall and connected", "Sing each phrase with its natural stress", "Avoid tightening on final consonants", "Review diction and line together"],
-    },
-    "46_Exercise_9.3_English_Art_Songs": {
-        "level": 9, "category": "Repertoire II", "title": "9.3 Simple English Art Songs",
-        "description": "Balance understandable English text with classical legato", "order": 48,
-        "skills": ["English Diction", "Legato", "Expression"], "difficulty": "Advanced", "duration_minutes": 25,
-        "prerequisites": ["9.1"], "instructions": ["Speak the text naturally", "Keep stressed words supported", "Connect vowels between consonants", "Keep the melody above the speech", "Perform the complete excerpt"],
-    },
-    "47_Exercise_9.4_Raga_Vocalise": {
-        "level": 9, "category": "Repertoire II", "title": "9.4 Raga-Inspired Vocalise",
-        "description": "Explore expressive pitch movement in a cross-cultural vocalise", "order": 49,
-        "skills": ["Improvisation", "Pitch Control", "Expression"], "difficulty": "Advanced", "duration_minutes": 25,
-        "prerequisites": ["9.2", "9.3"], "instructions": ["Listen to the tonic reference", "Sustain the tonal centre", "Explore the suggested scale slowly", "Use controlled slides between notes", "End by resolving clearly to the tonic"],
-    },
+
 }
+
+
+
+from pathlib import Path
+from utils.exercise_models import get_profile
+
+_ASSET_ROOT = Path(__file__).resolve().parents[1]
+for _key, _info in PAGES_MANIFEST.items():
+    if _info.get("is_dashboard"):
+        continue
+    _profile = get_profile(_key)
+    _info["pitch_model"] = _profile["pitch_model"]
+    _info["bpm"] = _profile["bpm"]
+    _score = f"assets/scores/{_profile['code'].replace('.', '_')}.png"
+    if (_ASSET_ROOT / _score).exists():
+        _info["score_asset"] = _score
+    _examples = {
+        "1.4": "1_4_legato", "1.5": "1_5_five_note_scale", "1.6": "1_6_staccato_legato",
+        "2.1": "2_1_major_ascending", "2.2": "2_2_major_descending", "2.3": "2_3_minor_scales",
+        "2.4": "2_4_intervals", "2.5": "2_5_arpeggios", "4.3": "4_3_breath_phrasing",
+        "4.4": "4_4_melodic_etude", "4.5": "4_5_simple_vocalises",
+    }
+    if _profile["code"] in _examples:
+        _info["exemplar_asset"] = f"assets/examples/{_examples[_profile['code']]}.wav"
+    if _profile["code"] == "2.3":
+        _info["alternate_exemplar_asset"] = "assets/examples/2_3_harmonic_minor_provided.wav"
+        _info["alternate_exemplar_label"] = "Provided harmonic-minor example (raised seventh). This take uses natural minor."
+    if _profile["code"] == "6.1":
+        _info["skills"] = ["Tone Brightness", "Tone Awareness", "Sustain"]
+        _info["instructions"].append("Repeat at three comfortable pitches, allowing about four seconds per round (at least 12 seconds total).")
+    if _profile["code"] == "6.2":
+        _info["instructions"].append("Hold each colour for three seconds: bright, balanced, then dark (nine seconds total).")
+    if _profile["code"] in {"6.3", "6.4", "6.5"}:
+        _info["instructions"].append(f"Record the complete rise and return for at least {_profile.get('min_seconds', 8)} seconds.")
+    if _profile["code"] == "0.1":
+        _info["exhalation_asset"] = "assets/examples/0_1_warm_up.wav"
+    # Do not advertise references that were never supplied or generated.
+    for _asset_field in ("exemplar_asset", "exhalation_asset"):
+        if _info.get(_asset_field) and not (_ASSET_ROOT / _info[_asset_field]).is_file():
+            _info.pop(_asset_field)
 
 
 def get_page_info(page_key):
@@ -745,7 +738,7 @@ def get_pages_by_category(category):
 def get_level_progress(completed_exercises):
     """Calculate progress for each level."""
     progress = {}
-    for level in range(10):
+    for level in range(8):
         pages = get_pages_by_level(level)
         completed = sum(
             1 for k in pages.keys()
@@ -820,7 +813,7 @@ def get_level_badge(level):
     labels = {
         0: "Diagnostics", 1: "Fundamentals", 2: "Advanced",
         3: "Articulation", 4: "Legato", 5: "Rhythm",
-        6: "Resonance", 7: "Classical", 8: "Repertoire I", 9: "Repertoire II",
+        6: "Resonance", 7: "Classical",
     }
     return labels.get(level, "")
 
@@ -828,7 +821,7 @@ def get_level_badge(level):
 def format_page_listing():
     """Format all pages for display."""
     pages_by_level = {}
-    for level in range(10):
+    for level in range(8):
         pages = get_pages_by_level(level)
         pages_by_level[level] = sorted(
             pages.items(),
