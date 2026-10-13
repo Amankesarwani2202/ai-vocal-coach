@@ -1,10 +1,8 @@
 from pathlib import Path
-import sys
 import pytest
 from streamlit.testing.v1 import AppTest
 
 ROOT=Path(__file__).resolve().parents[1]/'ai_vocal_coach'
-sys.path.insert(0,str(ROOT/'pages'))
 from utils.pages_config import PAGES_MANIFEST
 
 
@@ -41,3 +39,25 @@ def test_incomplete_take_disables_progress_and_retry_clears_capture():
     assert app.session_state.exercise_stage=='introduction'
     assert app.session_state['take_'+page]>epoch
     assert app.session_state.exercise_analysis is None
+
+
+def test_level_five_imports_with_only_app_root_on_path():
+    # AppTest adds the tested page directory to sys.path; production navigation
+    # only guarantees the application root. Use a fresh interpreter to check it.
+    import subprocess
+    import sys
+    import os
+    script = """
+from pathlib import Path
+import runpy
+import pages.generic_exercise as runner
+seen = []
+runner.run_generic_exercise = lambda exercise_id, next_page: seen.append(exercise_id)
+for page in sorted(Path('pages').glob('2[5-9]_Exercise_5.*.py')):
+    runpy.run_path(str(page))
+assert len(seen) == 5, seen
+"""
+    result = subprocess.run([sys.executable, '-c', script], cwd=ROOT,
+                            env={**os.environ, 'PYTHONPATH':str(ROOT)},
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
