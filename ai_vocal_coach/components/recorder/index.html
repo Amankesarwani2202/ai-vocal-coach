@@ -60,10 +60,13 @@ button:disabled{opacity:.5;cursor:default}#cue{padding:10px 0;min-height:28px;li
     const samples=new Float32Array(analyser.fftSize);analyser.getFloatTimeDomainData(samples);
     let rms=0;for(const s of samples)rms+=s*s;rms=Math.sqrt(rms/samples.length);document.getElementById('level').value=Math.min(1,rms*6);
     const hz=pitch(samples,context.sampleRate),spb=60/profile.bpm;
-    if(beatZero!==null&&context.currentTime<beatZero){message('Count in: '+Math.max(1,Math.min(4,4-Math.floor((context.currentTime-(beatZero-4*spb))/spb))));previousRms=rms;return;}
+    if(beatZero!==null&&context.currentTime<beatZero){if(profile.code==='7.3'&&context.currentTime>beatZero-.3){message('Grace note just before the next click; main note on click 1.');previousRms=rms;return;}message('Count in: '+Math.max(1,Math.min(4,4-Math.floor((context.currentTime-(beatZero-4*spb))/spb))));previousRms=rms;return;}
     if(hz&&!firstPitch){firstPitch=hz;startedAt=now;}
     const elapsed=startedAt===null?0:now-startedAt;
-    if(profile.pitch_model==='rhythm'){
+    if(profile.code==='7.3'){
+      const beat=(context.currentTime-beatZero)/spb;
+      message(beat<0?'Quick grace note now; main note on the click.':'Main notes on clicks 1–4; grace notes just before each click.');
+    }else if(profile.pitch_model==='rhythm'){
       if(rms>Math.max(.004,previousRms*1.7)&&now-lastAttack>.13){
         lastAttack=now;const beat=(context.currentTime-beatZero)/spb;
         const expected=profile.onset_beats||[];const nearest=expected.reduce((best,b)=>Math.abs(b-beat)<Math.abs(best-beat)?b:best,expected[0]||0);
@@ -111,7 +114,7 @@ button:disabled{opacity:.5;cursor:default}#cue{padding:10px 0;min-height:28px;li
   }
   async function finish(){
     if(!running)return;
-    const rate=context.sampleRate,origin=beatZero===null?null:beatZero-captureStart;
+    const rate=context.sampleRate,origin=beatZero===null?null:beatZero-captureStart-(profile.code==='7.3'?.12:0);
     const samples=new Float32Array(frames);let offset=0;for(const chunk of chunks){samples.set(chunk,offset);offset+=chunk.length;}
     await cleanup();stop.disabled=true;start.disabled=false;
     if(samples.length<rate*.3){message('The recording was too short. Please try again.');return;}
@@ -129,7 +132,7 @@ button:disabled{opacity:.5;cursor:default}#cue{padding:10px 0;min-height:28px;li
       processor=context.createScriptProcessor(4096,1,1);muted=context.createGain();muted.gain.value=0;source.connect(processor);processor.connect(muted).connect(context.destination);
       captureStart=context.currentTime;running=true;
       processor.onaudioprocess=e=>{if(!running)return;const chunk=new Float32Array(e.inputBuffer.getChannelData(0));chunks.push(chunk);frames+=chunk.length;};
-      beatZero=profile.pitch_model==='rhythm'?context.currentTime+.3+4*60/profile.bpm:null;
+      beatZero=(profile.pitch_model==='rhythm'||profile.code==='7.3')?context.currentTime+.3+4*60/profile.bpm:null;
       if(beatZero!==null){nextClick=beatZero-4*60/profile.bpm;clickNumber=0;scheduler=setInterval(schedule,25);schedule();}
       ticker=setInterval(tick,160);stop.disabled=false;message('Recording. Begin when ready.');
     }catch(error){await cleanup();start.disabled=false;stop.disabled=true;message('Microphone access was unavailable. Allow microphone access or use the simple microphone below.');}

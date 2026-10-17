@@ -82,6 +82,8 @@ def clear_user_data():
     st.session_state.clear()
     init_session_state()
     st.session_state.theme = theme
+    st.session_state.remember_progress = False
+    st.session_state["_browser_progress_loaded"] = True
 
 
 def update_voice_profile(profile_data: dict):

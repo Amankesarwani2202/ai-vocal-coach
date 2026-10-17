@@ -862,6 +862,8 @@ def analyze_exercise(audio_bytes, exercise, context=None):
     selected=np.flatnonzero(span)[::max(1,int(np.sum(span)//1000))]
     plot={"times":f.relative_times[selected].tolist(),"f0":[float(v) if np.isfinite(v) else None for v in f.f0[selected]],"target_f0":[float(v) if np.isfinite(v) else None for v in target[selected]],"deviation_cents":[float(v) if np.isfinite(v) else None for v in errors[selected]],"root_hz":root}
     result={"score":score,"xp":max(10,int(score*.6)) if complete else 0,"subscores":scores,"feedback":events[:12]+summaries,"duration":len(f.y)/SR,"performance_duration":f.duration,"pitch_data":plot,"complete":bool(complete),"metric_evidence":report.evidence,"withheld_metrics":report.withheld,"profile":profile,"analysis_meta":{"engine":"exercise-aware YIN + LPC","sample_rate":SR,"onset_offset_seconds":f.origin,"valid_performance_end_seconds":valid_end-f.origin,"scoring_version":"level7-v2","pitch_model":model,"relative_target":not bool(context.get("root_hz")),"bpm":context.get("bpm",profile["bpm"])}}
+    if profile.get('run_phase')=='fast' and context.get('slow_take'):
+        result['performance_duration']+=context['slow_take'].get('performance_duration',0)
     if profile["code"]=="7.6":
         result["reflection_only"]=True
         result["xp"]=0

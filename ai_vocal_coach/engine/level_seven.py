@@ -23,6 +23,9 @@ def evaluate(f, p, ctx, r, notes=None, root=None):
     if code=='7.1':
         rename('Register Connection','Pitch Connection')
         base=ctx.get('root_hz') or measured_pitch(.08,.4)
+        zone=ctx.get('passaggio_zone_hz')
+        if base and zone and base<=zone[0]<zone[1]<=base*2**(7/12):
+            r.event('known_zone_crossing','This interval crosses the transition zone you supplied. Let the tone lighten gently through it; anatomical register changes are not diagnosed from audio.',valence='neutral',timing='Summary')
         if base:
             arrivals=[(3.08,3.45,base*2**(7/12)),(6.08,6.45,base)]
             errors=[]
@@ -77,34 +80,47 @@ def evaluate(f, p, ctx, r, notes=None, root=None):
                 r.event('resonance_observation',f'The spectral envelope changed by about {np.mean(changes):.0f} Hz near the upper notes. Listen for an easy adjustment; formant movement alone cannot prove release or forcing.',valence='neutral',timing='Summary')
         else:r.unavailable('Vowel Brightness Contrast','Reliable F1/F2 coverage is insufficient to compare ah and eh.')
         r.unavailable('Resonance Adjustment','Formant movement is reported when measurable, but cannot reliably score natural adjustment versus forcing without a personal baseline.')
-        if not ctx.get('soft_rms_baseline'):r.unavailable('Soft Dynamic','Microphone gain is uncalibrated; a personal soft-singing baseline is needed to judge absolute loudness.')
+        baseline=ctx.get('soft_rms_baseline')
+        if baseline and baseline>0:
+            level=float(np.median(f.rms[f.voiced]));rise=float(20*np.log10(max(level,1e-9)/baseline))
+            metric('Soft Dynamic Match',100-8*max(0,rise-3),'Recorded energy compared with your soft reference on the same microphone; this is not absolute vocal loudness.',above_baseline_db=rise)
+            if rise>6:event('too_loud','This take is louder than your soft reference — start lighter while keeping the microphone position unchanged.',metric='Soft Dynamic Match')
+        else:r.unavailable('Soft Dynamic','Record an optional soft reference to compare energy using the same microphone and gain.')
     if code=='7.3':
-        # Grace/main boundaries are short; pitch plateaus detect legato ornaments
-        # that do not produce a separate energy attack.
-        bounds, offsets=note_grid(p,ctx.get('bpm')); root=root or measured_pitch(.2,.7)
-        clear=[];land=[];beat=[];directions=set()
-        for k in range(4):
-            a,b,c=bounds[2*k:2*k+3]; grace=measured_pitch(a+.02,b-.02); main=measured_pitch(b+.04,c-.05)
-            ok=bool(grace and main and abs(float(cents(grace,main))-offsets[2*k]*100)<80)
-            clear.append(ok)
-            if ok:directions.add(1 if grace>main else -1)
-            else:event('missing_grace','The grace note did not come through distinctly — add a quick extra pitch before the main note.',a,'Grace Note Clarity')
-            if main and root:
-                err=abs(float(cents(main,root)));land.append(err)
-                region=np.flatnonzero(window(a,min(c,b+.3)) & (np.abs(cents(f.f0,root))<35))
-                settled=None
-                for i in region:
-                    if i+4<len(t) and np.all(f.voiced[i:i+4]) and np.all(np.abs(cents(f.f0[i:i+4],root))<35):settled=t[i];break
-                if settled is not None:
-                    beat.append(abs(settled-b))
-                    if settled-b>.15:event('late_main','The grace note is delaying the main beat — borrow time before the beat, then settle on the landing.',settled,'Beat Stability')
-                    if settled-a>.25:event('long_grace','The grace note is taking too much time — make it quicker and lighter.',a,'Grace Note Clarity')
-        metric('Grace Note Clarity',100*np.mean(clear),'Distinct short pitch and sustained main-note pairs detected.',distinct_pairs=int(sum(clear)),expected_pairs=4)
-        if beat:metric('Beat Stability',100-400*np.mean(beat),'Main-note pitch arrival compared with the relative beat grid. Device-clock entrance is not assessed.',mean_arrival_error_seconds=float(np.mean(beat)))
-        else:r.unavailable('Beat Stability','No confident main-note arrivals could be matched to the beat grid.')
-        if land:metric('Landing Accuracy',accuracy(np.mean(land)),'Held main notes compared with the first confirmed main pitch.',mean_absolute_cents=float(np.mean(land)))
-        else:r.unavailable('Landing Accuracy','Main-note plateaus were not clear enough to score landing pitch.')
-        if len(directions)<2:event('ornament_direction','Try the grace note from both sides — above the main note, then below it.',metric='Grace Note Clarity')
+        from engine.ornaments import ornament_rules
+        ornament_rules(f,p,ctx,r,root)
+    if code=='7.5' and p.get('run_phase'):
+        phase=p['run_phase'];bounds,offsets=note_grid(p,ctx.get('bpm'))
+        measured=[n for n in (notes or []) if n['error'] is not None]
+        stable=sum(n['sd']<45 and abs(n['error'])<80 for n in measured)
+        if len(measured)>=4:
+            metric('Note Distinctness (Agility)',100*stable/5,'Five separate stable pitch plateaus are expected in this turn.',distinct_notes=int(stable),expected_notes=5)
+            if stable<4:event('blurred_run','Keep the notes distinct rather than sliding through the turn.',metric='Note Distinctness (Agility)')
+        else:r.unavailable('Note Distinctness (Agility)','Too few confident pitch plateaus were tracked. Repeat the complete turn clearly.')
+        log=cents(f.f0,440);valid=f.voiced[1:]&f.voiced[:-1]
+        peaks,_=find_peaks(np.where(valid,np.nan_to_num(np.abs(np.diff(log))),0),height=35,distance=12)
+        changes=t[peaks+1];changes=changes[(changes>.1)&(changes<f.duration-.1)]
+        if len(changes)>=3:
+            spacing=float(np.median(np.diff(changes[:4])))
+            r.evidence['measured_tempo']={'bpm':60/max(spacing,.05)}
+        if phase=='fast':
+            slow=ctx.get('slow_take',{});baseline=slow.get('metric_evidence',{}).get('measured_tempo',{}).get('bpm')
+            fast=r.evidence.get('measured_tempo',{}).get('bpm')
+            slow_error=slow.get('metric_evidence',{}).get('Pitch Accuracy',{}).get('mean_absolute_cents')
+            fast_error=r.evidence.get('Pitch Accuracy',{}).get('mean_absolute_cents')
+            if baseline and fast and slow_error is not None and fast_error is not None:
+                ratio=fast/baseline;loss=max(0,fast_error-slow_error)
+                metric('Tempo Progression',min(100,max(0,(ratio-1)*65))*max(0,1-loss/100),'Measured tempo increase compared with your passed slow take, adjusted for pitch-accuracy loss.',speed_ratio=ratio,phase_errors_cents=[slow_error,fast_error])
+                if ratio<1.4:event('no_speedup','Keep the turn accurate, then make this pass faster than your slow take.',metric='Tempo Progression')
+                if loss>30:event('speed_accuracy','Accuracy dropped at speed — return to slow practice before increasing it.',metric='Tempo Progression')
+            else:r.unavailable('Tempo Progression','Both passes need clear separate pitch transitions to compare actual tempo.')
+            last=notes[-1] if notes else None
+            if last and last['error'] is not None:
+                held=min(1,max(0,f.duration-last['start'])/(last['end']-last['start']))
+                metric('Landing Clarity',accuracy(abs(last['error']))*held,'Final tonic pitch and held duration.',held_fraction=held,deviation_cents=last['error'])
+                if held<.7 or abs(last['error'])>30:event('rushed_landing','Let the final tonic settle and hold it for the full second.',last['start'],'Landing Clarity')
+            else:r.unavailable('Landing Clarity','The final tonic was not tracked clearly.')
+        return
     if code in {'7.4','7.5'}:
         if code=='7.4':rename('Continuity','Legato Continuity');rename('Vowel Consistency','Vowel Stability')
         bounds,offsets=note_grid(p,ctx.get('bpm'))
@@ -154,17 +170,38 @@ def evaluate(f, p, ctx, r, notes=None, root=None):
             else:r.unavailable('Landing Clarity','The final held tonic was not tracked clearly.')
             r.unavailable('Jaw and Tongue Freedom','Audio alone does not establish jaw or tongue tension. Listen for ease and compare the slow and fast passes.')
     if code=='7.6':
+        from engine.exercise_analysis import match_grid
         gaps=internal_gaps(f); planned=ctx.get('planned_breaths',[])
         if planned:
-            matches=sum(any(a-.4<=v<=b+.4 for a,b in gaps) for v in planned)
-            metric('Breath Planning',100*matches/max(len(planned),len(gaps),1),'Detected pauses compared with your planned breath times; word boundaries are not inferred.',matched_breaths=matches,planned_breaths=len(planned))
+            centers=[(a+b)/2 for a,b in gaps]
+            pairs=match_grid(centers,planned,.6)
+            metric('Breath Planning',100*len(pairs)/max(len(planned),len(gaps),1),'One-to-one matching of recorded pauses and planned breath times; word boundaries are not inferred.',matched_breaths=len(pairs),planned_breaths=len(planned))
+            matched={i for i,j in pairs}
+            for i,(a,b) in enumerate(gaps):
+                if i not in matched:event('unplanned_capstone_breath','This pause was outside your breath plan — listen back and check the phrase boundary.',a,'Breath Planning')
         else:r.unavailable('Breath Planning','Enter planned breath times before recording to compare your pauses with the plan.')
         jumps=[]
         log=cents(f.f0,440)
         for a,b in runs(f.voiced):
             if b-a>15:jumps.extend(np.diff(log[a:b]).tolist())
         if jumps:metric('Pitch Stability',accuracy(np.median(np.abs(jumps))*3),'Local pitch control without a fixed target. Intended melody and vibrato can affect this proxy.',median_local_change_cents=float(np.median(np.abs(jumps))))
-        db=20*np.log10(f.rms[f.voiced]+1e-8);spread=float(np.percentile(db,90)-np.percentile(db,10))
-        metric('Dynamic Shape',100*np.clip(spread/6,0,1),'Recorded dynamic range; musical intention requires your listening review.',range_db=spread)
-        r.unavailable('Diction Clarity','Attack definition is an acoustic proxy only; word clarity needs a listening review without aligned lyrics.')
+        from scipy.ndimage import uniform_filter1d
+        from engine.exercise_analysis import _articulation_rules,detect_attacks
+        span=(t>=0)&(t<f.duration-.08)
+        envelope=uniform_filter1d(f.rms,31)[span]
+        db=20*np.log10(envelope+1e-8)
+        spread=float(np.percentile(db,90)-np.percentile(db,10))
+        # Require a sustained rise and fall, rather than rewarding raw range.
+        slope=np.diff(uniform_filter1d(db,31))
+        up=float(np.mean(slope>.005));down=float(np.mean(slope<-.005))
+        balance=min(1,min(up,down)/.15)
+        variation=float(np.median(np.abs(np.diff(db))))
+        shape=100*np.clip(spread/6,0,1)*balance*max(.2,1-variation)
+        metric('Dynamic Shape',shape,'Smoothed phrase envelope checked for a sustained swell and release, rather than raw volume range alone. Intentional expression needs your listening review.',range_db=spread,rising_fraction=up,falling_fraction=down)
+        idx=detect_attacks(f,.12)
+        if len(idx)>=4:
+            _articulation_rules(f,p,ctx,r)
+            rename('Onset Clarity','Diction Clarity')
+            r.event('diction_proxy','Diction Clarity measures acoustic attack definition, not word recognition or pronunciation. Listen back to confirm that your words are understandable.',valence='neutral',timing='Summary')
+        else:r.unavailable('Diction Clarity','At least four distinct syllable attacks are needed for an acoustic clarity estimate. Word pronunciation still requires listening.')
         rename('Continuity','Legato Continuity')

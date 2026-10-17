@@ -43,27 +43,20 @@ def certificate(name,date,stats):
 
 
 def progress_tools():
-    st.caption('Progress is stored in this session. Download a backup to restore your journey, including your first completion, on a later visit.')
-    keys=['user_name','xp','completed_exercises','best_scores','history','session_started_at','course_finished_at','course_completion_seen','voice_profile']
-    data={k:(list(st.session_state[k]) if isinstance(st.session_state.get(k),set) else st.session_state.get(k)) for k in keys if k in st.session_state}
-    st.download_button('Download progress backup',json.dumps(data),file_name='vocal-coach-progress.json',mime='application/json',key='progress_backup')
+    from utils.progress_store import snapshot,validate
+    def remember_changed():st.session_state.remember_progress=st.session_state['_remember_widget']
+    if st.session_state.get('_remember_widget')!=st.session_state.get('remember_progress',False):
+        st.session_state['_remember_widget']=st.session_state.get('remember_progress',False)
+    st.checkbox('Remember my progress on this browser',key='_remember_widget',on_change=remember_changed)
+    st.caption('Optional browser storage keeps your name, scores, reflection and first-completion record across refreshes and app reboots. Audio is never saved. Shared browsers share this profile; use a backup to move to another device.')
+    if st.session_state.get('_browser_progress_unavailable'):st.info('Browser storage is unavailable here. Download a progress backup instead.')
+    st.download_button('Download progress backup',json.dumps(snapshot(st.session_state)),file_name='vocal-coach-progress.json',mime='application/json',key='progress_backup')
     uploaded=st.file_uploader('Restore your progress backup',type=['json'],key='restore_progress')
     if uploaded and st.button('Restore progress'):
         try:
             if uploaded.size>2_000_000:raise ValueError('Backup is too large.')
-            data=json.loads(uploaded.getvalue())
-            if not isinstance(data,dict) or not isinstance(data.get('history',[]),list) or not isinstance(data.get('completed_exercises',[]),list):raise ValueError('Invalid backup format.')
-            if not isinstance(data.get('xp',0),(int,float)) or not isinstance(data.get('user_name',''),str):raise ValueError('Invalid profile values.')
-            if not all(isinstance(row,dict) and isinstance(row.get('practice_seconds',0),(int,float)) and isinstance(row.get('subscores',{}),dict) and all(isinstance(v,(int,float)) for v in row.get('subscores',{}).values()) for row in data.get('history',[])):raise ValueError('Invalid history.')
-            if not all(isinstance(v,str) for v in data.get('completed_exercises',[])):raise ValueError('Invalid exercise list.')
-            for k in ['best_scores','voice_profile']:
-                if k in data and not isinstance(data[k],dict):raise ValueError('Invalid profile fields.')
-            for k in ['session_started_at','course_finished_at']:
-                if k in data and not isinstance(data[k],str):raise ValueError('Invalid dates.')
-            if 'course_completion_seen' in data and not isinstance(data['course_completion_seen'],bool):raise ValueError('Invalid completion flag.')
-            if data.get('course_completion_seen') and not data.get('course_finished_at'):raise ValueError('Missing completion date.')
-            for k in keys:
-                if k in data:st.session_state[k]=set(data[k]) if k=='completed_exercises' else data[k]
+            clean=validate(json.loads(uploaded.getvalue()))
+            st.session_state.update(clean)
             st.rerun()
         except (ValueError,TypeError,KeyError):st.error('This backup could not be restored. Choose a Vocal Coach progress JSON file.')
 

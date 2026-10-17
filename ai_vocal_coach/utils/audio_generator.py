@@ -233,3 +233,18 @@ def generate_all_exemplars(output_dir):
         filepath = f"{output_dir}/{exercise_id}.wav"
         save_exemplar_to_file(exercise_id, filepath)
         print(f"✅ {exercise_id}.wav")
+
+
+def generate_profile_audio(profile,sr=16000):
+    """Play the active recording phase in its confirmed key."""
+    from utils.exercise_models import note_grid
+    boundaries,offsets=note_grid(profile)
+    root=profile.get('reference_root_hz') or 440*2**((profile.get('root_midi',60)-69)/12)
+    parts=[]
+    for i,offset in enumerate(offsets):
+        note=generate_tone(root*2**(offset/12),boundaries[i+1]-boundaries[i],sr)
+        fade=min(int(.015*sr),len(note)//2)
+        if fade:
+            note[:fade]*=np.linspace(0,1,fade);note[-fade:]*=np.linspace(1,0,fade)
+        parts.append(note)
+    return np.concatenate(parts) if parts else np.zeros(sr)

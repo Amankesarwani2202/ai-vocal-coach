@@ -1239,7 +1239,7 @@
       },
       {
         "semitones": 0,
-        "beats": 1
+        "beats": 0.856
       },
       {
         "semitones": 2,
@@ -1247,7 +1247,7 @@
       },
       {
         "semitones": 0,
-        "beats": 1
+        "beats": 0.856
       },
       {
         "semitones": -2,
@@ -1255,7 +1255,7 @@
       },
       {
         "semitones": 0,
-        "beats": 1
+        "beats": 0.856
       },
       {
         "semitones": -2,
@@ -1265,6 +1265,12 @@
         "semitones": 0,
         "beats": 1
       }
+    ],
+    "main_onset_beats": [
+      0.144,
+      1.144,
+      2.144,
+      3.144
     ]
   },
   "7.4": {

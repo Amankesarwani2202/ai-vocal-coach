@@ -111,3 +111,6 @@ nav = st.navigation(
 )
 
 nav.run()
+
+from components.browser_progress import sync_browser_progress
+sync_browser_progress()
