@@ -1098,28 +1098,228 @@
     "code": "7.1",
     "type": "portamento",
     "pitch_model": "glide",
-    "bpm": 120,
+    "bpm": 60,
     "quiet_start": false,
-    "min_seconds": 4
+    "min_seconds": 6.3,
+    "segments": [
+      {
+        "start": 0,
+        "end": 0.5,
+        "from": 0,
+        "to": 0
+      },
+      {
+        "start": 0.5,
+        "end": 3,
+        "from": 0,
+        "to": 7
+      },
+      {
+        "start": 3,
+        "end": 3.5,
+        "from": 7,
+        "to": 7
+      },
+      {
+        "start": 3.5,
+        "end": 6,
+        "from": 7,
+        "to": 0
+      },
+      {
+        "start": 6,
+        "end": 6.5,
+        "from": 0,
+        "to": 0
+      }
+    ],
+    "root_midi": 60
   },
   "7.2": {
     "code": "7.2",
     "type": "register_turning_points",
-    "pitch_model": "glide",
-    "bpm": 120,
+    "pitch_model": "stepped",
+    "bpm": 72,
     "quiet_start": false,
-    "min_seconds": 4
+    "root_midi": 61,
+    "notes": [
+      {
+        "semitones": 0,
+        "beats": 1
+      },
+      {
+        "semitones": 1,
+        "beats": 1
+      },
+      {
+        "semitones": 3,
+        "beats": 1
+      },
+      {
+        "semitones": 4,
+        "beats": 1
+      },
+      {
+        "semitones": 6,
+        "beats": 1
+      },
+      {
+        "semitones": 6,
+        "beats": 1
+      },
+      {
+        "semitones": 4,
+        "beats": 1
+      },
+      {
+        "semitones": 3,
+        "beats": 1
+      },
+      {
+        "semitones": 1,
+        "beats": 1
+      },
+      {
+        "semitones": 0,
+        "beats": 1
+      },
+      {
+        "semitones": 0,
+        "beats": 1
+      },
+      {
+        "semitones": 1,
+        "beats": 1
+      },
+      {
+        "semitones": 3,
+        "beats": 1
+      },
+      {
+        "semitones": 4,
+        "beats": 1
+      },
+      {
+        "semitones": 6,
+        "beats": 1
+      },
+      {
+        "semitones": 6,
+        "beats": 1
+      },
+      {
+        "semitones": 4,
+        "beats": 1
+      },
+      {
+        "semitones": 3,
+        "beats": 1
+      },
+      {
+        "semitones": 1,
+        "beats": 1
+      },
+      {
+        "semitones": 0,
+        "beats": 1
+      }
+    ]
   },
   "7.3": {
     "code": "7.3",
     "type": "ornamentation",
-    "pitch_model": "free",
-    "bpm": 120,
-    "quiet_start": false
+    "pitch_model": "stepped",
+    "bpm": 72,
+    "quiet_start": false,
+    "root_midi": 67,
+    "notes": [
+      {
+        "semitones": 2,
+        "beats": 0.144
+      },
+      {
+        "semitones": 0,
+        "beats": 1
+      },
+      {
+        "semitones": 2,
+        "beats": 0.144
+      },
+      {
+        "semitones": 0,
+        "beats": 1
+      },
+      {
+        "semitones": -2,
+        "beats": 0.144
+      },
+      {
+        "semitones": 0,
+        "beats": 1
+      },
+      {
+        "semitones": -2,
+        "beats": 0.144
+      },
+      {
+        "semitones": 0,
+        "beats": 1
+      }
+    ]
   },
   "7.4": {
     "code": "7.4",
     "type": "slow_melismas",
+    "pitch_model": "stepped",
+    "bpm": 55,
+    "quiet_start": false,
+    "notes": [
+      {
+        "semitones": 0,
+        "beats": 1
+      },
+      {
+        "semitones": 2,
+        "beats": 1
+      },
+      {
+        "semitones": 4,
+        "beats": 1
+      },
+      {
+        "semitones": 5,
+        "beats": 1
+      },
+      {
+        "semitones": 7,
+        "beats": 1
+      },
+      {
+        "semitones": 0,
+        "beats": 1.1458333333333333
+      },
+      {
+        "semitones": 2,
+        "beats": 1.1458333333333333
+      },
+      {
+        "semitones": 4,
+        "beats": 1.1458333333333333
+      },
+      {
+        "semitones": 5,
+        "beats": 1.1458333333333333
+      },
+      {
+        "semitones": 7,
+        "beats": 1.1458333333333333
+      }
+    ],
+    "root_midi": 60
+  },
+  "7.5": {
+    "code": "7.5",
+    "type": "fast_runs",
     "pitch_model": "stepped",
     "bpm": 60,
     "quiet_start": false,
@@ -1137,76 +1337,42 @@
         "beats": 1
       },
       {
-        "semitones": 5,
-        "beats": 1
-      },
-      {
-        "semitones": 7,
-        "beats": 1
-      },
-      {
-        "semitones": 5,
-        "beats": 1
-      },
-      {
-        "semitones": 4,
-        "beats": 1
-      },
-      {
         "semitones": 2,
         "beats": 1
       },
       {
         "semitones": 0,
         "beats": 1
+      },
+      {
+        "semitones": 0,
+        "beats": 0.3333333333333333
+      },
+      {
+        "semitones": 2,
+        "beats": 0.3333333333333333
+      },
+      {
+        "semitones": 4,
+        "beats": 0.3333333333333333
+      },
+      {
+        "semitones": 2,
+        "beats": 0.3333333333333333
+      },
+      {
+        "semitones": 0,
+        "beats": 1
       }
     ],
-    "root_midi": 60
+    "root_midi": 60,
+    "fast_bpm": 180
   },
-  "7.5": {
-    "code": "7.5",
-    "type": "fast_runs",
-    "pitch_model": "stepped",
-    "bpm": 180,
-    "quiet_start": false,
-    "notes": [
-      {
-        "semitones": 0,
-        "beats": 1
-      },
-      {
-        "semitones": 2,
-        "beats": 1
-      },
-      {
-        "semitones": 4,
-        "beats": 1
-      },
-      {
-        "semitones": 5,
-        "beats": 1
-      },
-      {
-        "semitones": 7,
-        "beats": 1
-      },
-      {
-        "semitones": 5,
-        "beats": 1
-      },
-      {
-        "semitones": 4,
-        "beats": 1
-      },
-      {
-        "semitones": 2,
-        "beats": 1
-      },
-      {
-        "semitones": 0,
-        "beats": 1
-      }
-    ],
-    "root_midi": 60
+  "7.6": {
+    "code": "7.6",
+    "type": "capstone",
+    "pitch_model": "free",
+    "bpm": 72,
+    "min_seconds": 15
   }
 }

@@ -675,6 +675,30 @@ PAGES_MANIFEST = {
 
 
 
+PAGES_MANIFEST["40_Exercise_7.6_Capstone_Performance"] = {
+    "level":7,"category":"Classical","title":"7.6 Capstone Performance",
+    "description":"Bring every skill together in one freely chosen phrase",
+    "order":42,"skills":["Integration","Self-Direction"],"difficulty":"Advanced",
+    "duration_minutes":20,"prerequisites":["7.5"],
+    "instructions":["Choose a phrase you enjoy, about 15–30 seconds or 8–16 bars.",
+    "Plan your breaths and enter the planned times before recording.",
+    "Sing once from start to finish at your natural tempo without stopping.",
+    "Bring together connected legato, steady pitch, clear diction and shaped dynamics.",
+    "Listen back and write one thing you are proud of before finishing."]}
+_LEVEL_SEVEN_INSTRUCTIONS = {
+"7.1":["Default C4 → G4 → C4; transpose with your comfortable starting pitch.","Hold C4 for 0.5s, glide up a fifth over 2.5s, hold G4 for 0.5s.","Glide back down over 2.5s and hold C4 for 0.5s.","Start directly from the held note without dipping below it; let each arrival settle."],
+"7.2":["Default C♯4–D4–E4–F4–G4, then G4–F4–E4–D4–C♯4.","Sing softly on ah, one note per beat at 72 BPM.","Let the tone lighten comfortably through the upper notes and keep energy on the return.","Repeat the same ten notes on a brighter eh vowel.","A range estimate cannot identify your passaggio. Choose a comfortable transposition; never force the default range."],
+"7.3":["At 72 BPM, sing A4 briefly for 0.12s, then sustain G4 for one beat (0.83s). Repeat twice.","Then approach from below: F4 briefly for 0.12s, landing on G4 for one beat. Repeat twice.","Keep the grace note quick and distinct; borrow time before the main beat.","Land directly on G4 and hold it without sliding in. The first confirmed main note sets your relative key."],
+"7.4":["Sing C4–D4–E4–F4–G4 on one connected ah vowel at 55 BPM, one note per beat.","Repeat the same five notes at 48 BPM, keeping the vowel stable and the volume even.","Land each pitch directly without interrupting the airflow."],
+"7.5":["First sing C4–D4–E4–D4–C4 slowly at 60 BPM, one note per beat.","Once accurate, repeat the same five-note turn at 180 BPM (three notes per second).",
+"Hold the final C4 for a full second; do not trail off.","Keep each pitch distinct. Keep your jaw and tongue comfortable; return to the slow pass if accuracy drops."],
+}
+for _entry in PAGES_MANIFEST.values():
+    _code=_entry.get("title","").split(" ")[0]
+    if _code in _LEVEL_SEVEN_INSTRUCTIONS:
+        _entry["instructions"]=_LEVEL_SEVEN_INSTRUCTIONS[_code]
+        if _code=="7.1":_entry["skills"]=["Portamento","Pitch Connection","Legato"]
+
 from pathlib import Path
 from utils.exercise_models import get_profile
 

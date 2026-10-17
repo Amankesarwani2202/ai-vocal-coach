@@ -11,7 +11,7 @@
 | Evidence and coaching | Measured evidence accompanies scores; explicit feedback valence, weakest/tied skills, catalog-verified recommendations. |
 | Levels 2–5 rules | Scale landing/drift, leap/scoop, arpeggio continuity, LPC vowel changes, phrase boundaries, distinct beat grids, matching and note values. |
 | Recording and retry | Instructions/reference replay, optional live cues, fresh take keys, incomplete take cannot save progress. |
-| Retired content | Levels 8–9 removed from navigation/catalog/pages/progress; 7.5 finishes at Dashboard. |
+| Retired content | Levels 8–9 removed from navigation/catalog/pages/progress; 7.5 leads to 7.6 Capstone and then the course finish page. |
 
 ## Source discrepancies
 
@@ -25,3 +25,7 @@
 Audio cannot establish anatomical placement, projection, tongue/jaw position, chest mechanism or an individual passaggio. These claims are withheld rather than scored. Vowel spectral changes and brightness are acoustic proxies; per-word intelligibility has no calibrated alignment model. Absolute syncopation phase requires the live recorder's shared clock; simple microphone recordings receive relative timing feedback only. Microphone/device latency is not calibrated. Live cues are advisory and final analysis is performed after capture.
 
 Regression tests cover synthetic audio signals and all active Streamlit exercise pages. Real microphone/browser capture was not verified end to end because the browser session stalled; device permission, capture and playback require a manual smoke test before merging.
+
+## Level 7 follow-up
+
+See [LEVEL_7_QA.md](LEVEL_7_QA.md) for every supplied Level 7 item, regression coverage and remaining live-recording/account/calibration acceptance. The active curriculum now has 42 exercises including 7.6 Capstone Performance.

@@ -92,6 +92,7 @@ level_7 = [
     st.Page(str(pages_dir / "37_Exercise_7.3_Ornamentation.py"), title="7.3 Ornamentation"),
     st.Page(str(pages_dir / "38_Exercise_7.4_Slow_Melismas.py"), title="7.4 Slow Melismas"),
     st.Page(str(pages_dir / "39_Exercise_7.5_Fast_Runs.py"), title="7.5 Fast Runs"),
+    st.Page(str(pages_dir / "40_Exercise_7.6_Capstone_Performance.py"), title="7.6 Capstone Performance"),
 ]
 
 nav = st.navigation(
@@ -105,6 +106,7 @@ nav = st.navigation(
         "Level 5 — Rhythm": level_5,
         "Level 6 — Resonance": level_6,
         "Level 7 — Classical Technique": level_7,
+        "Keep singing": [st.Page(str(pages_dir / "41_Course_Completion.py"),title="Completion"),st.Page(str(pages_dir / "42_Free_Practice.py"),title="Free practice")],
     }
 )
 

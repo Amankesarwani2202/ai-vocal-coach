@@ -1,6 +1,6 @@
 # AI Vocal Coach
 
-Streamlit vocal exercises with recorded-audio analysis, measured feedback and progress tracking. The active curriculum contains 41 exercises across levels 0–7.
+Streamlit vocal exercises with recorded-audio analysis, measured feedback and progress tracking. The active curriculum contains 42 exercises across levels 0–7.
 
 ## Run locally
 

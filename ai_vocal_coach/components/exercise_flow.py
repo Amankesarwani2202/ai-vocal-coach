@@ -64,6 +64,12 @@ def render_stage_indicator(current_stage):
 
 
 def _render_reference(exercise_info):
+    profile=get_profile(exercise_info.get('title',''))
+    if profile['code'].startswith('7.') and profile['code']!='7.6':
+        from utils.audio_generator import generate_exemplar_audio
+        st.markdown('**Listen to the reference pattern**')
+        st.audio(generate_exemplar_audio(profile['code'].replace('.','_')),sample_rate=16000)
+        st.caption('Synthetic pitch and timing reference; choose a comfortable key before singing.')
     exemplar = exercise_info.get("exemplar_asset")
     if exemplar and (ASSET_ROOT / exemplar).is_file():
         st.markdown("**Listen to the example**")
@@ -161,7 +167,7 @@ def render_recording_stage(exercise_id, breathing_type="support", context=None):
     context = dict(context or {})
     st.markdown("**Your pattern and focus**")
     st.info(_FOCUS.get(profile["type"], "Use the written exercise below and keep the sound comfortable."))
-    if profile.get("notes") or profile["pitch_model"] == "rhythm":
+    if not profile["code"].startswith("7.") and (profile.get("notes") or profile["pitch_model"] == "rhythm"):
         bpm = st.slider("Tempo (BPM)", 40, 200, int(profile["bpm"]), key=f"tempo_{exercise_id}")
         profile["bpm"] = bpm
         context["bpm"] = bpm
@@ -172,6 +178,23 @@ def render_recording_stage(exercise_id, breathing_type="support", context=None):
         _render_reference(info)
         _render_score(info)
     reference = None
+    if profile['code'] in {'7.1','7.2','7.4','7.5'}:
+        key=st.selectbox('Starting pitch',['Use my first clear sung note','C3','C4','C5','G3','G4','C♯4'],key='start_pitch_'+exercise_id)
+        midi={'C3':48,'C4':60,'C5':72,'G3':55,'G4':67,'C♯4':61}
+        if key in midi:
+            from utils.audio_generator import generate_tone
+            reference=440*2**((midi[key]-69)/12)
+            context['root_hz']=reference
+            st.audio(generate_tone(reference,1),sample_rate=16000)
+        if profile['code']=='7.2':
+            st.caption('A range finder estimates range, not passaggio. Use a comfortable key; the default starts on C♯4.')
+    if profile['code']=='7.6':
+        text=st.text_input('Planned breath times in seconds (comma separated)',placeholder='6, 12, 18',key='planned_breaths')
+        try:
+            values=[float(v.strip()) for v in text.split(',') if v.strip()]
+            if any(not np.isfinite(v) or v<0 or v>120 for v in values):raise ValueError()
+            context['planned_breaths']=values
+        except ValueError:st.info('Use seconds such as 6, 12, 18. Breath planning feedback needs valid times.')
     if profile["type"] == "pitch_stability":
         from utils.audio_generator import generate_tone
         label = st.selectbox("Reference pitch", ["A4 — 440 Hz", "C4 — 262 Hz", "A3 — 220 Hz"], key=f"reference_{exercise_id}")
@@ -277,8 +300,10 @@ def render_results_stage(exercise_id, next_page):
     score = analysis.get("score",0)
     complete = analysis.get("complete",True)
     label = "Incomplete take" if not complete else "Excellent" if score >= 85 else "Good" if score >= 70 else "Keep practising"
-    st.markdown(f"### {score}/100 · {label}")
-    st.caption(f"+{analysis.get('xp',0)} XP" + (" · Scores describe the recorded portion; record the complete attempt before saving." if not complete else ""))
+    reflection=analysis.get('reflection_only',False)
+    if reflection:st.markdown('### Your vocal profile')
+    else:st.markdown(f"### {score}/100 · {label}")
+    if not reflection:st.caption(f"+{analysis.get('xp',0)} XP" + (" · Scores describe the recorded portion; record the complete attempt before saving." if not complete else ""))
     subscores = analysis.get("subscores",{})
     entries = list(subscores.items())
     for start in range(0,len(entries),3):
@@ -299,7 +324,17 @@ def render_results_stage(exercise_id, next_page):
     _render_pitch_target_chart(analysis,exercise_id)
     _render_timing_chart(analysis)
     st.divider()
-    render_feedback_and_summary(analysis,exercise_id)
+    if reflection:
+        import plotly.graph_objects as go
+        if subscores:
+            names=list(subscores);values=list(subscores.values())
+            fig=go.Figure(go.Scatterpolar(r=values+[values[0]],theta=names+[names[0]],fill='toself'))
+            fig.update_layout(polar=dict(radialaxis=dict(range=[0,100])),showlegend=False)
+            st.plotly_chart(fig,width='stretch')
+        st.caption('A reflection snapshot, with no pass/fail verdict. Pauses, melody and microphone setup can affect acoustic proxies.')
+        for event in analysis.get('feedback',[]):st.write(event['message'])
+        st.text_area('One thing I am proud of after listening back',key='capstone_proud')
+    else:render_feedback_and_summary(analysis,exercise_id)
     st.divider()
     left,right = st.columns(2)
     with left:
@@ -307,9 +342,9 @@ def render_results_stage(exercise_id, next_page):
             reset_exercise_flow()
             st.rerun()
     with right:
-        action = "Finish" if next_page == "pages/1_Dashboard.py" else "Save and continue"
-        if st.button(action,key=f"save_score_{exercise_id}",use_container_width=True,disabled=not complete):
-            add_score(exercise_id,score,analysis.get("xp",0))
+        action = "Finish course" if reflection else "Finish" if next_page == "pages/1_Dashboard.py" else "Save and continue"
+        if st.button(action,key=f"save_score_{exercise_id}",use_container_width=True,disabled=not complete or (reflection and not st.session_state.get("capstone_proud","").strip())):
+            add_score(exercise_id,score,analysis.get("xp",0),analysis=analysis)
             reset_exercise_flow()
             st.toast("Progress saved")
             st.switch_page(next_page)

@@ -1,0 +1,2 @@
+from components.course_completion import render_completion
+render_completion()

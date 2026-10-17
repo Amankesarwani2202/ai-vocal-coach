@@ -219,3 +219,10 @@ else:
         if st.button("Clear data and restart", disabled=not confirm_clear, key="clear_user_data"):
             clear_user_data()
             st.rerun()
+
+with st.expander("Save or restore your progress"):
+    from components.course_completion import progress_tools
+    progress_tools()
+if "40_Exercise_7.6_Capstone_Performance" in st.session_state.completed_exercises:
+    st.page_link("pages/41_Course_Completion.py",label="View completion and certificate")
+st.page_link("pages/42_Free_Practice.py",label="Free practice")

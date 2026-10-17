@@ -208,12 +208,18 @@ def _note_measurements(features, profile, context):
     bpm = context.get("bpm", profile["bpm"])
     boundaries, offsets = note_grid(profile, bpm)
     t = features.relative_times
-    first = features.f0[(t >= .06) & (t < min(.35, boundaries[1] - .06)) & features.voiced]
+    first = features.f0[(t >= .025) & (t < min(.35, boundaries[1] - .025)) & features.voiced]
     if not len(first):
-        first = features.f0[features.voiced][:20]
+        first = np.array([])
     root = context.get("root_hz")
     if not root:
-        root = float(np.median(first)) / 2 ** (offsets[0] / 12) if len(first) else 261.6256
+        if not len(first):
+            return [], np.full(len(t),np.nan), np.full(len(t),np.nan), None, boundaries
+        # Reject a noisy/subharmonic anchor rather than silently choosing C4.
+        spread = np.median(np.abs(cents(first,np.median(first))))
+        if spread > 60:
+            return [], np.full(len(t),np.nan), np.full(len(t),np.nan), None, boundaries
+        root = float(np.median(first)) / 2 ** (offsets[0] / 12)
     target = target_at_times(profile, t, root, bpm)
     errors = cents(features.f0, target)
     measurements = []
@@ -231,6 +237,12 @@ def _note_measurements(features, profile, context):
 def _pitch_rules(features, profile, context, report):
     notes, target, errors, root, boundaries = _note_measurements(features, profile, context)
     usable = [n for n in notes if n["error"] is not None]
+    comparison = np.abs(errors[np.isfinite(errors)])
+    if len(comparison) and np.mean(comparison) > 1200:
+        report.unavailable("Pitch Accuracy", "The generated target and performance differ by more than an octave. Target alignment is uncertain; no pitch score or sharp/flat advice is shown. Confirm your starting pitch and try again.")
+        import logging
+        logging.getLogger(__name__).warning("Rejected target alignment for %s: %.0f cents", profile['code'], np.mean(comparison))
+        return [], np.full(len(target),np.nan), np.full(len(errors),np.nan), None
     if len(usable) < max(2, len(notes) // 2):
         report.unavailable("Pitch Accuracy", "Not enough clear notes were tracked to score this pitch pattern. Record the complete pattern again.")
         return notes, target, errors, root
@@ -328,6 +340,7 @@ def _continuity_rules(features, profile, context, report):
     spb = 60/context.get("bpm", profile["bpm"])
     gaps = internal_gaps(features)
     allowed = [b*spb for b in profile.get("breath_beats", [])]
+    if profile["code"]=="7.6":allowed.extend(context.get("planned_breaths",[]))
     unexpected = [(a,b) for a,b in gaps if not any(a-.15 <= point <= b+.15 for point in allowed)]
     kind = profile["type"]
     if kind == "staccato":
@@ -343,7 +356,7 @@ def _continuity_rules(features, profile, context, report):
         for a,b in second:
             report.event("legato_gap", "Part 2 has a break — keep the legato notes connected in one airflow.", a, "Contrast", section="legato")
         return
-    connected = {"legato", "scale", "scale_ascending", "scale_descending", "minor_scale", "intervals", "arpeggios", "vowel_ascending", "vowel_modification", "legato_notes", "legato_melody", "breath_phrasing", "melodic_etude", "vocalises", "dynamic_shaping", "messa_di_voce", "mixing_registers", "portamento", "register_turning_points", "slow_melismas", "fast_runs", "pitch_stability"}
+    connected = {"legato", "scale", "scale_ascending", "scale_descending", "minor_scale", "intervals", "arpeggios", "vowel_ascending", "vowel_modification", "legato_notes", "legato_melody", "breath_phrasing", "melodic_etude", "vocalises", "dynamic_shaping", "messa_di_voce", "mixing_registers", "portamento", "register_turning_points", "slow_melismas", "fast_runs", "pitch_stability", "capstone"}
     if kind not in connected:
         return
     gap_duration = sum(b-a for a,b in unexpected)
@@ -437,11 +450,11 @@ def _glide_rules(features, report):
                        for a,b in runs(~features.voiced & features.active)
                        if len(voiced) and a>voiced[0]+5 and b<voiced[-1]-5 and (b-a)*.01>=.04]
     report.metric("Glide Smoothness", 100-8*roughness, f"Variation around the local glide rate was {roughness:.1f} cents per frame; intentional pitch movement is expected.", rate_roughness_cents=round(roughness,2))
-    report.metric("Register Connection", 100-18*len(jumps)-12*len(dropouts)-8*len(tracking_breaks), f"There were {len(jumps)} abrupt pitch discontinuities, {len(dropouts)} quiet interruptions, and {len(tracking_breaks)} tracking breaks during the glide.", discontinuities=len(jumps),interruptions=len(dropouts),tracking_breaks=len(tracking_breaks))
+    report.metric("Register Connection", 100-18*len(jumps), f"There were {len(jumps)} abrupt pitch discontinuities, {len(dropouts)} quiet interruptions, and {len(tracking_breaks)} tracking breaks during the glide.", discontinuities=len(jumps),interruptions=len(dropouts),tracking_breaks=len(tracking_breaks))
     for i in jumps[:3]:
-        report.event("register_discontinuity", "There is an abrupt break in the glide here — let the tone lighten as you rise and keep the transition connected.", features.relative_times[i], "Register Connection")
+        report.event("register_discontinuity", "There is an abrupt break in the glide here — keep the airflow and pitch moving continuously.", features.relative_times[i], "Register Connection")
     for a,b in (dropouts+tracking_breaks)[:3]:
-        report.event("register_dropout", "Pitch tracking briefly dropped out during the transition — repeat gently and listen for a crack at this point.", a, "Register Connection", valence="neutral")
+        report.event("register_dropout", "Pitch tracking briefly dropped out during the transition — this window was excluded from connection scoring; try again a little louder or slower.", a, "Register Connection", valence="neutral")
 
 
 def _vowel_rules(features, profile, context, report):
@@ -750,6 +763,13 @@ def analyze_exercise(audio_bytes, exercise, context=None):
         return invalid_result("The recording could not be read. Please record again or upload a WAV file.")
     if f.duration<.3 or np.max(f.rms)<2e-5:
         return invalid_result("No clear performance was detected. Move closer to the microphone and record again.")
+    # Shared valid-performance boundary: centred YIN/RMS frames near the
+    # cutoff contain padding and must not affect any score, event or chart.
+    valid_end = max(f.origin, f.end - FRAME / (2 * SR))
+    valid = (f.times >= f.origin) & (f.times < valid_end)
+    f.voiced &= valid
+    f.active &= valid
+    f.f0 = np.where(f.voiced, f.f0, np.nan)
     model=profile["pitch_model"]
     if profile["type"] == "clap_sing":
         active = np.flatnonzero(f.active)
@@ -762,13 +782,31 @@ def analyze_exercise(audio_bytes, exercise, context=None):
     target=np.full(len(f.times),np.nan)
     errors=np.full(len(f.times),np.nan)
     root=None
-    if model=="stepped":
+    notes=None
+    if model=="stepped" and profile["code"]!="7.3":
         notes,target,errors,root=_pitch_rules(f,profile,context,report)
+    elif profile['code']=='7.3':
+        main=f.f0[f.voiced & (f.relative_times>=.2) & (f.relative_times<.7)]
+        if len(main)>=4:
+            root=float(np.median(main))
+            target=target_at_times(profile,f.relative_times,root,context.get('bpm'))
+            errors=cents(f.f0,target)
     elif model=="held":
         _held_pitch_rules(f,profile,context,report)
     elif model=="glide":
         _glide_rules(f,report)
-    _continuity_rules(f,profile,context,report)
+        if profile.get('segments'):
+            start=f.f0[f.voiced & (f.relative_times>=.08) & (f.relative_times<.4)]
+            if len(start):
+                root=context.get('root_hz') or float(np.median(start))
+                for seg in profile['segments']:
+                    mask=(f.relative_times>=seg['start'])&(f.relative_times<seg['end'])
+                    offset=np.interp(f.relative_times[mask],[seg['start'],seg['end']],[seg['from'],seg['to']])
+                    target[mask]=root*2**(offset/12)
+                # Deviation markers belong to held arrivals, not the glide path.
+
+    if profile["code"]!="7.3":
+        _continuity_rules(f,profile,context,report)
     if profile.get("dynamic_arc"):
         _dynamic_rules(f,profile,report)
     if profile["type"] in {"pitch_stability","dynamic_shaping","messa_di_voce","forward_placement","resonance_colours"}:
@@ -792,16 +830,23 @@ def analyze_exercise(audio_bytes, exercise, context=None):
         report.metric("Airflow Steadiness",100-100*spread,f"Exhalation energy varied by {spread:.0%} relative to its mean.",rms_cv=round(spread,3))
         target_seconds=profile.get("min_seconds",8)
         report.metric("Support Duration",100*min(f.duration/target_seconds,1),f"The exhalation lasted {f.duration:.1f}s against a {target_seconds:g}s target.",duration_seconds=round(f.duration,2),target_seconds=target_seconds)
-    if not report.scores:
+    if profile['code']=='7.4':
+        _vowel_rules(f,profile,context,report)
+    if profile['code'].startswith('7.'):
+        from engine.level_seven import evaluate
+        evaluate(f,profile,context,report,notes,root)
+    if not report.scores and not profile['code'].startswith('7.'):
         report.metric("Voice Presence",100*np.mean(f.voiced[(f.times>=f.origin)&(f.times<=f.end)]),"This measures how consistently a sung signal was tracked, rather than a pitch or placement target.",voiced_frames=int(np.sum(f.voiced)))
     planned=expected_seconds(profile,context.get("bpm"))
     minimum=profile.get("min_seconds",planned*.85 if profile.get("notes") or profile.get("total_beats") else .8)
-    complete=f.duration+.08>=minimum
+    complete=f.duration+.08>=minimum and bool(report.scores)
+    if profile["code"]=="7.5" and root is None:
+        complete=False
     if profile["type"]=="clap_sing":
         # The first clap anchors the combined take, not the later vocal entrance.
         active=np.flatnonzero(f.active)
         complete=(f.times[active[-1]]-f.times[active[0]]+.08>=minimum) if len(active) else False
-    if not complete:
+    if f.duration+.08<minimum:
         report.event("ended_early",f"Recording ended early: {f.duration:.1f}s of performance was detected; this attempt needs about {minimum:.1f}s. Record all sections before saving progress.",f.duration,valence="neutral",timing="Summary",minimum_seconds=round(float(minimum),2))
     scores=report.scores
     score=bounded_score(np.mean(list(scores.values()))) if scores else 0
@@ -813,10 +858,13 @@ def analyze_exercise(audio_bytes, exercise, context=None):
         identity=(item["rule"],int(item["seconds"]*2),item.get("metric"))
         if identity not in seen:
             events.append(item);seen.add(identity)
-    span=(f.times>=f.origin)&(f.times<=f.end)
+    span=(f.times>=f.origin)&(f.times<valid_end)
     selected=np.flatnonzero(span)[::max(1,int(np.sum(span)//1000))]
     plot={"times":f.relative_times[selected].tolist(),"f0":[float(v) if np.isfinite(v) else None for v in f.f0[selected]],"target_f0":[float(v) if np.isfinite(v) else None for v in target[selected]],"deviation_cents":[float(v) if np.isfinite(v) else None for v in errors[selected]],"root_hz":root}
-    result={"score":score,"xp":max(10,int(score*.6)) if complete else 0,"subscores":scores,"feedback":events[:12]+summaries,"duration":len(f.y)/SR,"performance_duration":f.duration,"pitch_data":plot,"complete":bool(complete),"metric_evidence":report.evidence,"withheld_metrics":report.withheld,"profile":profile,"analysis_meta":{"engine":"exercise-aware YIN + LPC","sample_rate":SR,"onset_offset_seconds":f.origin,"pitch_model":model,"relative_target":not bool(context.get("root_hz")),"bpm":context.get("bpm",profile["bpm"])}}
+    result={"score":score,"xp":max(10,int(score*.6)) if complete else 0,"subscores":scores,"feedback":events[:12]+summaries,"duration":len(f.y)/SR,"performance_duration":f.duration,"pitch_data":plot,"complete":bool(complete),"metric_evidence":report.evidence,"withheld_metrics":report.withheld,"profile":profile,"analysis_meta":{"engine":"exercise-aware YIN + LPC","sample_rate":SR,"onset_offset_seconds":f.origin,"valid_performance_end_seconds":valid_end-f.origin,"scoring_version":"level7-v2","pitch_model":model,"relative_target":not bool(context.get("root_hz")),"bpm":context.get("bpm",profile["bpm"])}}
+    if profile["code"]=="7.6":
+        result["reflection_only"]=True
+        result["xp"]=0
     if timing_data is not None:
         result["timing_data"]=timing_data
     return result

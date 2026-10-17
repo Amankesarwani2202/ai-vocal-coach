@@ -52,6 +52,8 @@ def beat_grid(profile, bpm=None, vocal=False):
 
 
 def expected_seconds(profile, bpm=None):
+    if profile.get("segments"):
+        return float(profile["segments"][-1]["end"])
     if profile.get("notes"):
         return float(note_grid(profile, bpm)[0][-1])
     if profile.get("total_beats"):

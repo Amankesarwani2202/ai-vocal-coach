@@ -31,6 +31,14 @@ def generate_exemplar_audio(exercise_id, sr=16000):
 
     from utils.exercise_models import curriculum, get_profile, note_grid
     model = next((p for p in curriculum().values() if p["code"].replace(".", "_") == exercise_id[:3]), None)
+    if model and model.get('segments'):
+        t=np.arange(int(model['segments'][-1]['end']*sr))/sr
+        offsets=np.zeros_like(t)
+        for seg in model['segments']:
+            mask=(t>=seg['start'])&(t<seg['end'])
+            offsets[mask]=np.interp(t[mask],[seg['start'],seg['end']],[seg['from'],seg['to']])
+        hz=261.625565*2**(offsets/12)
+        return .3*np.sin(np.cumsum(hz)*2*np.pi/sr)
     if model and model.get("notes"):
         boundaries, offsets = note_grid(model)
         root_hz = 440 * 2 ** ((model.get("root_midi", 60) - 69) / 12)
