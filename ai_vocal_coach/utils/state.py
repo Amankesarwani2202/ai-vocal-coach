@@ -53,18 +53,23 @@ def get_user_profile():
     }
 
 
-def add_score(exercise_id: str, score: int, xp_earned: int):
+def add_score(exercise_id: str, score: int, xp_earned: int, analysis=None):
     """Updates user progress after an exercise."""
     st.session_state.xp += xp_earned
     st.session_state.completed_exercises.add(exercise_id)
 
-    if exercise_id not in st.session_state.best_scores or score > st.session_state.best_scores[exercise_id]:
+    reflection=(analysis or {}).get("reflection_only",False)
+    if not reflection and (exercise_id not in st.session_state.best_scores or score > st.session_state.best_scores[exercise_id]):
         st.session_state.best_scores[exercise_id] = score
 
     st.session_state.history.append(
         {
             "exercise": exercise_id,
-            "score": score,
+            "subscores":(analysis or {}).get("subscores",{}),
+            "practice_seconds":(analysis or {}).get("performance_duration",0),
+            "scoring_version":(analysis or {}).get("analysis_meta",{}).get("scoring_version"),
+            "score": None if reflection else score,
+            "reflection":st.session_state.get("capstone_proud","") if reflection else None,
             "xp": xp_earned,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
         }
@@ -77,6 +82,8 @@ def clear_user_data():
     st.session_state.clear()
     init_session_state()
     st.session_state.theme = theme
+    st.session_state.remember_progress = False
+    st.session_state["_browser_progress_loaded"] = True
 
 
 def update_voice_profile(profile_data: dict):

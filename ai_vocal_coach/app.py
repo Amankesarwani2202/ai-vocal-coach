@@ -92,22 +92,7 @@ level_7 = [
     st.Page(str(pages_dir / "37_Exercise_7.3_Ornamentation.py"), title="7.3 Ornamentation"),
     st.Page(str(pages_dir / "38_Exercise_7.4_Slow_Melismas.py"), title="7.4 Slow Melismas"),
     st.Page(str(pages_dir / "39_Exercise_7.5_Fast_Runs.py"), title="7.5 Fast Runs"),
-]
-
-# Level 8 — Repertoire Starter Pieces
-level_8 = [
-    st.Page(str(pages_dir / "40_Exercise_8.1_Caro_Mio_Ben.py"), title="8.1 Caro mio ben"),
-    st.Page(str(pages_dir / "41_Exercise_8.2_Amarilli_Mia_Bella.py"), title="8.2 Amarilli mia bella"),
-    st.Page(str(pages_dir / "42_Exercise_8.3_Folk_Song_Settings.py"), title="8.3 Folk Song Settings"),
-    st.Page(str(pages_dir / "43_Exercise_8.4_Italian_Art_Song.py"), title="8.4 Italian Art Song"),
-]
-
-# Level 9 — Intermediate Repertoire
-level_9 = [
-    st.Page(str(pages_dir / "44_Exercise_9.1_Italian_Art_Songs.py"), title="9.1 Italian Art Songs"),
-    st.Page(str(pages_dir / "45_Exercise_9.2_German_Lieder.py"), title="9.2 German Lieder"),
-    st.Page(str(pages_dir / "46_Exercise_9.3_English_Art_Songs.py"), title="9.3 English Art Songs"),
-    st.Page(str(pages_dir / "47_Exercise_9.4_Raga_Vocalise.py"), title="9.4 Raga-Inspired Vocalise"),
+    st.Page(str(pages_dir / "40_Exercise_7.6_Capstone_Performance.py"), title="7.6 Capstone Performance"),
 ]
 
 nav = st.navigation(
@@ -121,9 +106,11 @@ nav = st.navigation(
         "Level 5 — Rhythm": level_5,
         "Level 6 — Resonance": level_6,
         "Level 7 — Classical Technique": level_7,
-        "Level 8 — Repertoire I": level_8,
-        "Level 9 — Repertoire II": level_9,
+        "Keep singing": [st.Page(str(pages_dir / "41_Course_Completion.py"),title="Completion"),st.Page(str(pages_dir / "42_Free_Practice.py"),title="Free practice")],
     }
 )
 
 nav.run()
+
+from components.browser_progress import sync_browser_progress
+sync_browser_progress()

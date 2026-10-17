@@ -5,130 +5,83 @@ Generates encouraging, non-technical feedback for users
 """
 
 
-def generate_coaching_summary(score, feedback_list, subscores_dict, exercise_type=None):
-    """
-    Generate an encouraging coaching summary.
-
-    Args:
-        score: Overall score (0-100)
-        feedback_list: List of feedback strings
-        subscores_dict: Dictionary of component scores
-
-    Returns:
-        Dict with what_went_well, work_on, next_time
-    """
-    summary = {"what_went_well": [], "work_on": [], "next_time": ""}
-
-    # Normalize feedback_list: accept list of strings or list of dicts
-    flat_feedback = []
-    seen_feedback = set()
-    deduplicate_feedback = True
-    for f in feedback_list:
-        if isinstance(f, dict):
-            message = f.get("message", "")
-        else:
-            message = str(f)
-        normalized = message.strip().lower()
-        if normalized and (not deduplicate_feedback or normalized not in seen_feedback):
-            flat_feedback.append(message)
-            seen_feedback.add(normalized)
-
-    import re
-
-    def _matches(text, keywords):
-        """Word-boundary safe match — avoids 'try' matching inside 'entry'."""
-        t = text.lower()
-        for kw in keywords:
-            if " " in kw:
-                if kw in t:
-                    return True
-            else:
-                if re.search(r'\b' + re.escape(kw) + r'\b', t):
-                    return True
-        return False
-
-    POSITIVE_KW = ["good", "strong", "excellent", "great", "consistent", "clean", "steady", "solid", "well", "clear", "smooth"]
-    NEGATIVE_KW = ["less stable", "less steady", "wobble", "wobbled", "uneven", "improve", "strained", "flat", "sharp", "breathy", "crack", "break", "drift", "thin", "gap", "noisy"]
-
-    # A message is positive if it has positive keywords and NO negative keywords
-    positive_feedback = [
-        f for f in flat_feedback
-        if _matches(f, POSITIVE_KW) and not _matches(f, NEGATIVE_KW)
-    ]
-    # A message is a concern if it has negative keywords
-    areas_to_improve = [
-        f for f in flat_feedback
-        if _matches(f, NEGATIVE_KW)
-    ]
-
-    # What went well
-    for feedback in positive_feedback:
-        summary["what_went_well"].append(feedback.strip())
-
+def generate_coaching_summary(score, feedback_list, subscores_dict, exercise_type=None, exercise_id=None):
+    """Use explicit event valence and live catalog entries for one summary schema."""
+    from utils.pages_config import PAGES_MANIFEST
+    from utils.exercise_models import get_profile
+    profile = get_profile(exercise_id or exercise_type or "0.1")
+    current_code = profile["code"]
+    summary = {"score": score, "verdict": "Excellent" if score >= 85 else "Good" if score >= 70 else "Keep practising",
+               "what_went_well": [], "work_on": [], "observations": [], "next_time": "", "weakest_metrics": []}
+    seen = set()
+    for event in feedback_list:
+        # Old untagged feedback is an observation; never infer praise from wording.
+        item = event if isinstance(event, dict) else {"message": str(event), "valence": "neutral"}
+        message = item.get("message", "").strip()
+        if not message or message.lower() in seen:
+            continue
+        seen.add(message.lower())
+        bucket = {"positive": "what_went_well", "negative": "work_on", "neutral": "observations"}.get(item.get("valence"), "observations")
+        summary[bucket].append(message)
     if not summary["what_went_well"]:
-        if score >= 85:
-            summary["what_went_well"].append("Solid performance overall.")
-        elif score >= 70:
-            summary["what_went_well"].append("You're on the right track.")
-
-    # Areas to work on, without repeating the same raw event in the summary.
-    for feedback in areas_to_improve:
-        if not deduplicate_feedback or feedback.strip() not in summary["work_on"]:
-            summary["work_on"].append(feedback.strip())
-
+        summary["what_went_well"] = ["No clear strength was confirmed in this take yet. Use the measurements and listening notes below."]
     if not summary["work_on"]:
-        for component, sub_score in subscores_dict.items():
-            if sub_score < 70:
-                summary["work_on"].append(f"Focus on {component.lower()}.")
-
-    if score >= 85:
-        summary["next_time"] = "You're mastering this! Try to maintain this consistency, then push for even higher scores."
-    elif score >= 70:
-        summary["next_time"] = "Good progress! Work on the areas above, then try again. You'll see improvement with practice."
-    else:
-        summary["next_time"] = "Focus on one thing at a time, then try again and compare the same measurement."
-
-    action_by_component = {
-        "Evenness": "Repeat a supported five-note scale, using one even breath from the first note to the last.",
-        "Pitch Accuracy": "Slow the pattern down and repeat it with a reference tone, checking each landing before moving on.",
-        "Range": "Repeat the scale at a comfortable starting pitch, keeping the top note as clear as the first.",
-        "Control": "Repeat the descending pattern while keeping the same breath support as the starting note.",
-        "Pitch Stability": "Repeat the sustained-note exercise and make small pitch corrections early rather than searching for the note.",
-        "Breath Support": "Repeat a supported breathing exercise, keeping the ribs expanded while the airflow stays even.",
-        "Continuity": "Repeat the phrase slowly on one breath, removing any gap or breath pulse between notes.",
-        "Clarity": "Isolate the transition or consonant that sounds blurred and repeat it 5 times at half speed.",
-        "Tone": "Repeat on a single vowel ('ah') focusing on an open jaw and relaxed throat, not extra pressure.",
-        "Leap Accuracy": "Hear the target note in your head before the leap, then jump directly to it without sliding.",
-        "Interval Accuracy": "Sing the lower note, imagine the higher one, then sing both again — only move once the higher note is clear in your mind.",
-        "Scale Accuracy": "Revisit the scale one step at a time, checking each pitch against a keyboard or reference tone before moving on.",
-        "Vowel Consistency": "Fix your mouth shape on the first note and keep it identical through every pitch change.",
+        summary["work_on"] = ["No specific correction was confirmed. Repeat the complete exercise and compare the measured skill."]
+    if not subscores_dict:
+        summary["next_time"] = "Record this exercise again so the coach has a clear, complete take to measure."
+        return summary
+    lowest = min(subscores_dict.values())
+    weakest = [(name, value) for name, value in subscores_dict.items() if value <= lowest + 3]
+    summary["weakest_metrics"] = [name for name, value in weakest]
+    actions = {
+        "Pitch Accuracy": "Listen to the written pattern and check each note landing slowly.",
+        "Pitch Stability": "Settle on the reference early and keep the pitch centred through the hold.",
+        "Evenness": "Give each note the same breath energy without extra pushes.",
+        "Continuity": "Connect the phrase on one airflow, breathing only at the marked points.",
+        "Contrast": "Separate every note in Part 1, then connect the same notes in Part 2.",
+        "Glide Smoothness": "Repeat a slow rise and return, keeping the rate of pitch change smooth.",
+        "Register Connection": "Let the tone lighten through the transition and listen for abrupt breaks.",
+        "Dynamic Control": "Grow gently from soft to a controlled peak, then return gradually to soft.",
+        "Sustain": "Take a fuller breath and finish the requested duration without forcing the release.",
+        "Vowel Consistency": "Keep each intended vowel's mouth shape the same throughout its round.",
+        "Onset Clarity": "Make each consonant quick and defined, then release into the vowel.",
+        "Articulation Transfer": "Bring the spoken phrase's consonant definition into the sung phrase.",
+        "Tone Colour Contrast": "Use one comfortable pitch and make bright, balanced, and dark rounds clearly different.",
+        "Beat Accuracy": "Listen to a few clicks first, then place each attack exactly on its written beat.",
+        "Off-beat Placement": "Wait through the first half beat and attack on the 'and' of 1.",
+        "Pattern Completion": "Count the complete written pattern and perform every attack once.",
+        "Tempo Consistency": "Keep the underlying click steady through every repetition.",
+        "Note Values": "Hold each long note for its full written beat value.",
+        "Compound Grouping": "Group the six subdivisions as 3+3 and stress the first of each group.",
+        "Voice Independence": "Keep quarter-note claps steady while holding the voice for two beats.",
+        "Airflow Steadiness": "Keep the exhalation even from the start to the release.",
+        "Support Duration": "Use a comfortable full breath and finish the eight-second exhalation.",
+        "Voice Presence": "Choose a comfortable pitch and record the full exercise clearly.",
     }
-    _follow_up_exercises = {
-        "Evenness": "Exercise 2.1 (Major Scale Ascending)",
-        "Pitch Accuracy": "Exercise 2.1 (Major Scale Ascending)",
-        "Scale Accuracy": "Exercise 2.2 (Major Scale Descending)",
-        "Range": "Exercise 2.3 (Minor Scale)",
-        "Leap Accuracy": "Exercise 2.4 (Interval Jumps)",
-        "Interval Accuracy": "Exercise 2.4 (Interval Jumps)",
-        "Control": "Exercise 2.5 (Arpeggios)",
-        "Pitch Stability": "Exercise 2.6 (Pitch Stability)",
-        "Vowel Consistency": "Exercise 3.1 (Vowel Sustain)",
-        "Tone": "Exercise 3.2 (Vowel Ascending)",
-        "Continuity": "Exercise 3.5 (Legato Notes)",
-        "Clarity": "Exercise 3.4 (Consonant Clarity)",
-        "Breath Support": "Exercise 4.1 (Breath Phrasing)",
-    }
-
-    weakest = min(subscores_dict.items(), key=lambda item: item[1]) if subscores_dict else None
-    if weakest and weakest[1] < 70:
-        action = action_by_component.get(weakest[0])
-        if action:
-            follow_up = _follow_up_exercises.get(weakest[0], "")
-            follow_up_suffix = f" → Recommended follow-up: {follow_up}." if follow_up else ""
-            summary["next_time"] = (
-                f"{weakest[0]}: {weakest[1]}/100. {action}{follow_up_suffix}"
-            )
-
+    preferred = {"Pitch Accuracy": ["1.5", "2.1", "2.2"], "Pitch Stability": ["2.6", "1.3"],
+                 "Evenness": ["1.1", "1.5"], "Continuity": ["4.1", "1.4"], "Contrast": ["1.4", "4.1"],
+                 "Glide Smoothness": ["7.1", "6.3"], "Register Connection": ["6.3", "7.2"],
+                 "Dynamic Control": ["6.4", "4.2"], "Sustain": ["2.6", "1.1"],
+                 "Vowel Consistency": ["3.1", "3.2"], "Onset Clarity": ["3.4", "1.3"],
+                 "Articulation Transfer": ["3.4", "3.6"], "Tone Colour Contrast": ["6.1", "6.2"],
+                 "Beat Accuracy": ["5.1", "5.2"], "Off-beat Placement": ["5.1", "5.5"],
+                 "Pattern Completion": ["5.1", "5.2"], "Tempo Consistency": ["5.1", "5.2"],
+                 "Note Values": ["5.2", "5.1"], "Compound Grouping": ["5.1", "5.3"],
+                 "Voice Independence": ["5.2", "5.4"], "Airflow Steadiness": ["1.1", "0.1"],
+                 "Support Duration": ["1.1", "0.1"]}
+    recommendations = []
+    for name, value in weakest:
+        candidates = preferred.get(name, [])
+        followup = next((info for code in candidates if code != current_code
+                         for info in PAGES_MANIFEST.values()
+                         if info.get("title", "").split(" ", 1)[0] == code), None)
+        sentence = f"{name}: {value}/100. {actions.get(name, 'Repeat the exercise slowly and compare this measurement.')}"
+        if followup:
+            sentence += f" Recommended follow-up: Exercise {followup['title']}."
+        else:
+            sentence += " We recommend doing this exercise again."
+        recommendations.append(sentence)
+    summary["next_time"] = " ".join(recommendations)
     return summary
 
 
